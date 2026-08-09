@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="C4_mesh.json" />
+    <None Remove="Car46_mesh.json" />
+    <None Remove="Claymore_mesh.json" />
+    <None Remove="Javelin_mesh.json" />
+    <None Remove="TAG19_mesh.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Meshes\C4_mesh.json" />
+    <EmbeddedResource Include="Meshes\Car46_mesh.json" />
+    <EmbeddedResource Include="Meshes\Claymore_mesh.json" />
+    <EmbeddedResource Include="Meshes\Javelin_mesh.json" />
+    <EmbeddedResource Include="Meshes\TAG19_mesh.json" />
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="copy &quot;$(TargetPath)&quot; &quot;D:\SteamLibrary\steamapps\common\FRUKT Demo\Mods&quot;" />
+  </Target>
+
+</Project>
