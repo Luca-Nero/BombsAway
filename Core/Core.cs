@@ -44,6 +44,8 @@ namespace BombsAway
             FruitPerfMon.RegisterCounter("BA Missiles", () => _missiles.Count);
             FruitPerfMon.RegisterCounter("BA VFX", () => VfxRunner.ActiveCount);
 
+            FruitUpdateCheck.Register("BombsAway", Version, "Luca-Nero", "BombsAway");
+
             LoggerInstance.Msg($"BombsAway v{Version} loaded.");
         }
 
