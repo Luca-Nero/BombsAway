@@ -1,6 +1,7 @@
 using FruitLib;
 using MelonLoader;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using static BombsAway.ExplosionSystem;
 using Color = UnityEngine.Color;
@@ -9,12 +10,14 @@ using Vector3 = UnityEngine.Vector3;
 
 [assembly: MelonInfo(typeof(BombsAway.Core), "BombsAway!", BombsAway.Core.Version, "Luca_Nero")]
 [assembly: MelonGame()]
+[assembly: MelonOptionalDependencies("FruitLib")]
+[assembly: HarmonyDontPatchAll]
 
 namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.0.2";
+        public const string Version = "5.0.3";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -31,9 +34,28 @@ namespace BombsAway
 
         internal static FruitMeshLibrary Meshes;
 
+        // ── FruitLib dependency ──────────────────────────────────────────────
+        private const int LibMajor = 2, LibMinor = 0, LibPatch = 0;
+        private bool _active;
+
         public override void OnInitializeMelon()
         {
+            _active = FruitGate.Check("BombsAway", LibMajor, LibMinor, LibPatch);
+            if (!_active) return;
+
             HarmonyInstance.PatchAll();
+            Init();
+        }
+
+        public override void OnLateInitializeMelon()
+        {
+            if (_active) return;
+            try { Unregister(FruitGate.FailureReason, silent: true); } catch { }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void Init()
+        {
             ConfigLoader.Load();
             Meshes = new FruitMeshLibrary(System.Reflection.Assembly.GetExecutingAssembly());
             ExplosionSystem.Init();
@@ -50,6 +72,13 @@ namespace BombsAway
         }
 
         public override void OnUpdate()
+        {
+            if (!_active) return;
+            UpdateBody();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void UpdateBody()
         {
 
             if (!FruitMenu.IsInputSuppressed)
@@ -231,6 +260,13 @@ namespace BombsAway
         }
 
         public override void OnLateUpdate()
+        {
+            if (!_active) return;
+            LateUpdateBody();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void LateUpdateBody()
         {
             CameraFX.Tick(Time.deltaTime);
             VfxRunner.Tick(Time.deltaTime);
