@@ -75,4 +75,4 @@ If you enjoy my work and want to support future updates, feel free to [buy me a 
 
 ## License
 
-[MIT](LICENSE) © Luca Nero / Game Community
+[AGPL-3.0](LICENSE) © Luca Nero / Game Community
