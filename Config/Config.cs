@@ -34,6 +34,7 @@ namespace BombsAway
         [FruitLib.MenuCategory("Grenade")] public static float FragMaxTime = 4f;
         [FruitLib.MenuCategory("Grenade")] public static float FragImpulse = 0.4f;
         [FruitLib.MenuCategory("Grenade")] public static float DamageScale = 1f;
+        [FruitLib.MenuCategory("Grenade")] public static int FragPower = 3000;
 
         // ── C4 ────────────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("C4")] public static float C4ThrowForce = 8f;
@@ -49,6 +50,7 @@ namespace BombsAway
         [FruitLib.MenuCategory("C4")] public static float C4FragMaxTime = 2f;
         [FruitLib.MenuCategory("C4")] public static float C4FragImpulse = 0.2f;
         [FruitLib.MenuCategory("C4")] public static float C4DamageScale = 1.5f;
+        [FruitLib.MenuCategory("C4")] public static int C4FragPower = 2000;
 
         // ── Claymore ──────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Claymore")] public static float MineThrowForce = 8f;
@@ -65,6 +67,7 @@ namespace BombsAway
         [FruitLib.MenuCategory("Claymore")] public static float MineFragMaxTime = 2f;
         [FruitLib.MenuCategory("Claymore")] public static float MineFragImpulse = 0.2f;
         [FruitLib.MenuCategory("Claymore")] public static float MineDamageScale = 1.2f;
+        [FruitLib.MenuCategory("Claymore")] public static int MineFragPower = 3800;
 
         // ── Missile warhead ───────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Missile")] public static float MissileBlastRadius = 3f;
@@ -78,6 +81,7 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile")] public static float MissileFragMaxTime = 2f;
         [FruitLib.MenuCategory("Missile")] public static float MissileFragImpulse = 0.4f;
         [FruitLib.MenuCategory("Missile")] public static float MissileDamageScale = 2f;
+        [FruitLib.MenuCategory("Missile")] public static int MissileFragPower = 4000;
 
         // ── Missile HE warhead ────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEBlastRadius = 6f;
@@ -91,6 +95,7 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEFragMaxTime = 4f;
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEFragImpulse = 0.2f;
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEDamageScale = 1.25f;
+        [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragPower = 3000;
 
         // ── Homing guidance ───────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Homing")] public static float MissileMinLaunchDist = 8f;
@@ -116,7 +121,6 @@ namespace BombsAway
         [FruitLib.MenuCategory("Wounds")] public static float MissileExplosionLift = 0.3f;
         [FruitLib.MenuCategory("Wounds")] public static float WoundIntensity = 1f;
         [FruitLib.MenuCategory("Wounds")] public static int MaxWoundsPerExplosion = 240;
-        [FruitLib.MenuCategory("Wounds")] public static float FragWoundDelay = 0.15f;
 
         // ── Effects ───────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Effects")] public static bool CamFXEnabled = true;
@@ -145,8 +149,6 @@ namespace BombsAway
 
         // ── Debug ─────────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Debug")] public static int DebugLevel = 0;
-        [FruitLib.MenuCategory("Debug")] public static bool DebugDrawRays = false;
-        [FruitLib.MenuCategory("Debug")] public static float DebugRayDuration = 2f;
         [FruitLib.MenuCategory("Debug")] public static int FragLayerMask  = ~0;
         [FruitLib.MenuCategory("Debug")] public static int WorldLayerMask = ~0;
 
@@ -161,12 +163,6 @@ namespace BombsAway
         public static bool CamFXActive => CamFXEnabled && CamFXIntensity > 0f;
         public static bool VFXActive => VFXIntensity > 0f;
 
-        public static float WChunkStep => 0.5f * WoundIntensity;
-        public static int WConeRadius(int step) => Mathf.RoundToInt(
-            (step == 0 ? 2f : step == 1 ? 1f : 0f) * WoundIntensity);
-        public static float WConeSignal(int step) =>
-            (step == 0 ? 1.0f : step == 1 ? 0.6f : 0.3f) * WoundIntensity;
-        public static float WPenetrationScale => 0.25f * WoundIntensity;
 
         public static bool Dbg1 => DebugLevel >= 1;
         public static bool Dbg2 => DebugLevel >= 2;

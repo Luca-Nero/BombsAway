@@ -3,6 +3,13 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>disable</Nullable>
+
+    <!-- MSB3277 = assembly version unification conflicts, thousands of them, from
+         referencing MelonLoader's net6 assemblies out of a netstandard2.1 project.
+         Nothing to fix; the loader resolves everything itself at runtime. Demoted
+         so that a warning about THIS mod's code is visible instead of buried.
+         Same reasoning as 2_GunsGunsGuns and 5_FruitLib. -->
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">

@@ -85,6 +85,8 @@ namespace BombsAway
 
     internal class ExplosionParams
     {
+        /// <summary>Which explosive this is. Registered with FruitLib as "BombsAway." + Kind.</summary>
+        public string Kind = "Grenade";
         public string MeshName = null;
         public bool Sticky = false;
         public DetonationMode Detonation = DetonationMode.Timer;
@@ -113,8 +115,9 @@ namespace BombsAway
         public float FragMaxTime = 4f;
         public float FragImpulse = 0.8f;
         public float DamageScale = 1f;
+        /// <summary>Wound power of one fragment at the charge (FruitBallistics).</summary>
+        public int FragPower = 3000;
         public int ArcSteps = 12;
-        public float FragWoundDelay = 0.15f;
         public float DebrisRaysRatio = 0.04f;
         public bool CameraFX = true;
         public bool IsFullSphere => HSpreadDeg >= 360f && VSpreadDeg >= 360f;
@@ -123,6 +126,8 @@ namespace BombsAway
         {
             return new ExplosionParams
             {
+                Kind = "Grenade",
+                FragPower = Config.FragPower,
                 MeshName = "TAG19_mesh",
                 Sticky = false,
 
@@ -148,7 +153,6 @@ namespace BombsAway
                 FragMaxTime = Config.FragMaxTime,
                 FragImpulse = Config.FragImpulse,
                 ArcSteps = Config.ArcDebugSteps,
-                FragWoundDelay = Config.FragWoundDelay,
 
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 CameraFX = Config.CamFXEnabled,
@@ -160,6 +164,8 @@ namespace BombsAway
         {
             return new ExplosionParams
             {
+                Kind = "C4",
+                FragPower = Config.C4FragPower,
                 MeshName = UnityEngine.Random.Range(1, 10000000) == 1 ? "Car46_mesh" : "C4_mesh",
                 Sticky = true,
 
@@ -184,7 +190,6 @@ namespace BombsAway
                 FragImpulse = Config.C4FragImpulse,
 
                 ArcSteps = Config.ArcDebugSteps,
-                FragWoundDelay = Config.FragWoundDelay,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.C4DamageScale,
@@ -195,6 +200,8 @@ namespace BombsAway
         {
             return new ExplosionParams
             {
+                Kind = "Claymore",
+                FragPower = Config.MineFragPower,
                 MeshName = "Claymore_mesh",
                 Sticky = true,
 
@@ -224,7 +231,6 @@ namespace BombsAway
                 FragImpulse = Config.MineFragImpulse,
 
                 ArcSteps = Config.ArcDebugSteps,
-                FragWoundDelay = Config.FragWoundDelay,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MineDamageScale,
@@ -235,6 +241,8 @@ namespace BombsAway
         {
             return new ExplosionParams
             {
+                Kind = "Missile",
+                FragPower = Config.MissileFragPower,
                 MeshName = "Javelin_mesh",
                 Sticky = false,
 
@@ -262,7 +270,6 @@ namespace BombsAway
                 FragImpulse = Config.MissileFragImpulse,
 
                 ArcSteps = Config.ArcDebugSteps,
-                FragWoundDelay = Config.FragWoundDelay,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MissileDamageScale,
@@ -273,6 +280,8 @@ namespace BombsAway
         {
             return new ExplosionParams
             {
+                Kind = "MissileHE",
+                FragPower = Config.MissileHEFragPower,
                 MeshName = "Javelin_mesh",
                 Sticky = false,
 
@@ -300,7 +309,6 @@ namespace BombsAway
                 FragImpulse = Config.MissileHEFragImpulse,
 
                 ArcSteps = Config.ArcDebugSteps,
-                FragWoundDelay = Config.FragWoundDelay,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MissileHEDamageScale,

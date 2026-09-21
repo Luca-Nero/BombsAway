@@ -92,7 +92,12 @@ namespace BombsAway
             ["MissileAscentHeight"] = "top-attack cruise altitude above target (m)",
             ["MissileDirectAscentHeight"] = "direct-attack cruise altitude above target (m)",
 
-            ["WoundIntensity"] = "scales wound depth / severity",
+            ["WoundIntensity"] = "scales every explosive wound: fragment power and overpressure damage",
+            ["FragPower"] = "wound power of one grenade fragment at the charge (FruitLib ballistics; a 7.62 rifle round is ~15000)",
+            ["C4FragPower"] = "wound power of one C4 fragment at the charge",
+            ["MineFragPower"] = "wound power of one claymore ball at the charge",
+            ["MissileFragPower"] = "wound power of one HEAT warhead fragment at the charge",
+            ["MissileHEFragPower"] = "wound power of one HE warhead fragment at the charge",
             ["MaxWoundsPerExplosion"] = "hard cap on ApplyWound calls per detonation — keeps the game's wound queue from stalling (lower = faster, 0 = unlimited)",
 
             ["CamFXEnabled"] = "master toggle for shake / post-process",
@@ -105,8 +110,6 @@ namespace BombsAway
             ["MinQualityScale"] = "AdaptiveQuality floor — 0.25 = never drop below a quarter of configured counts",
 
             ["DebugLevel"] = "0 = silent, 1 = key events, 2 = verbose",
-            ["DebugDrawRays"] = "draw debug rays / arcs",
-            ["DebugRayDuration"] = "debug ray lifetime (s)",
             ["FragLayerMask"] = "physics layer bitmask for blast / wound queries",
             ["WorldLayerMask"] = "physics layer bitmask for world-collision queries (sticky, impact, arc prediction)",
         };

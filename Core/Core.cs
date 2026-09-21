@@ -1,4 +1,4 @@
-using FruitLib;
+﻿using FruitLib;
 using MelonLoader;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -17,7 +17,9 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.0.3";
+        // 5.1.0 = detonation physics and wounds moved to FruitLib (FruitBallistics); fragments
+        // now wound through the game's own bullet wound model. Visuals stay here.
+        public const string Version = "5.1.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -35,7 +37,8 @@ namespace BombsAway
         internal static FruitMeshLibrary Meshes;
 
         // ── FruitLib dependency ──────────────────────────────────────────────
-        private const int LibMajor = 2, LibMinor = 0, LibPatch = 0;
+        // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
+        private const int LibMajor = 3, LibMinor = 1, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()
