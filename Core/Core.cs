@@ -17,9 +17,6 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        // 5.2.0 = ordnance moved onto one toolbar slot (wheel/LMB/RMB); keyboard throw binds removed.
-        // 5.1.0 = detonation physics and wounds moved to FruitLib (FruitBallistics); fragments
-        // now wound through the game's own bullet wound model. Visuals stay here.
         public const string Version = "5.2.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
