@@ -1,4 +1,4 @@
-﻿using FruitLib;
+using FruitLib;
 using MelonLoader;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -17,9 +17,10 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
+        // 5.2.0 = ordnance moved onto one toolbar slot (wheel/LMB/RMB); keyboard throw binds removed.
         // 5.1.0 = detonation physics and wounds moved to FruitLib (FruitBallistics); fragments
         // now wound through the game's own bullet wound model. Visuals stay here.
-        public const string Version = "5.1.0";
+        public const string Version = "5.2.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -32,13 +33,11 @@ namespace BombsAway
         public static WarheadMode MissileWarheadMode = WarheadMode.HEAT;
         public static bool PersistentLock = false;
 
-        private static readonly HashSet<KeyCode> _pressedRemoteKeys = new HashSet<KeyCode>();
-
         internal static FruitMeshLibrary Meshes;
 
         // ── FruitLib dependency ──────────────────────────────────────────────
         // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
-        private const int LibMajor = 3, LibMinor = 1, LibPatch = 0;
+        private const int LibMajor = 4, LibMinor = 0, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()
@@ -64,6 +63,7 @@ namespace BombsAway
             ExplosionSystem.Init();
             FruitMenu.Register("BombsAway", ConfigLoader.IniPath, typeof(Config));
             FruitHud.Register("BombsAway", BuildHud, order: 10);
+            RegisterLoadout();
 
             FruitPerfMon.RegisterCounter("BA Ordnance", () => _grenades.Count);
             FruitPerfMon.RegisterCounter("BA Missiles", () => _missiles.Count);
@@ -83,49 +83,56 @@ namespace BombsAway
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void UpdateBody()
         {
+            PlacementProbe.Tick(!FruitMenu.IsInputSuppressed);
+            TickPlacement();
 
             if (!FruitMenu.IsInputSuppressed)
             {
-                // ── Attack mode toggle (TOP -> DIRECT -> UNGUIDED -> TOP …) ────────
-                if (Input.GetKeyDown(Config.AttackModeKey))
+                TickLoadout();
+
+                // ── Missile settings: only with the launcher in hand ─────────────
+                if (Holding(Ordnance.Missile))
                 {
-                    MissileAttackMode = (AttackMode)(((int)MissileAttackMode + 1) % 3);
-                    if (Config.Dbg1) MelonLogger.Msg($"[Missile] Attack mode: {MissileAttackMode}");
+                    if (Input.GetKeyDown(Config.AttackModeKey))   // TOP -> DIRECT -> UNGUIDED -> TOP
+                    {
+                        MissileAttackMode = (AttackMode)(((int)MissileAttackMode + 1) % 3);
+                        if (Config.Dbg1) MelonLogger.Msg($"[Missile] Attack mode: {MissileAttackMode}");
+                    }
+
+                    if (Input.GetKeyDown(Config.WarheadModeKey))  // HEAT <-> HE
+                    {
+                        MissileWarheadMode = MissileWarheadMode == WarheadMode.HEAT
+                            ? WarheadMode.HE : WarheadMode.HEAT;
+                        if (Config.Dbg1) MelonLogger.Msg($"[Missile] Warhead: {MissileWarheadMode}");
+                    }
+
+                    if (Input.GetKeyDown(Config.LockModeKey))
+                    {
+                        PersistentLock = !PersistentLock;
+                        if (Config.Dbg1) MelonLogger.Msg(
+                            $"[Missile] Lock mode: {(PersistentLock ? "PERSISTENT" : "STANDARD")}");
+                    }
+
+                    if (Input.GetKeyDown(Config.ReleaseLockKey) && _lockedTarget != null)
+                    {
+                        if (Config.Dbg1) MelonLogger.Msg("[Missile] Lock released");
+                        _lockedTarget = null;
+                        HideLockIndicator();
+                    }
                 }
 
-                // ── Warhead mode toggle (HEAT <-> HE) ─────────────────────────────
-                if (Input.GetKeyDown(Config.WarheadModeKey))
+                // ── C4 remote mode: only with C4 in hand ─────────────────────────
+                if (Holding(Ordnance.C4) && Input.GetKeyDown(Config.RemoteToggleKey))
                 {
-                    MissileWarheadMode = MissileWarheadMode == WarheadMode.HEAT
-                        ? WarheadMode.HE : WarheadMode.HEAT;
-                    if (Config.Dbg1) MelonLogger.Msg($"[Missile] Warhead: {MissileWarheadMode}");
+                    RemoteSequential = !RemoteSequential;
+                    MelonLogger.Msg($"[Remote] Mode: {(RemoteSequential ? "SEQUENTIAL (oldest first)" : "SIMULTANEOUS (all at once)")}");
                 }
 
-                // ── Lock mode toggle ─────────────────────────────────────────────
-                if (Input.GetKeyDown(Config.LockModeKey))
-                {
-                    PersistentLock = !PersistentLock;
-                    if (Config.Dbg1) MelonLogger.Msg(
-                        $"[Missile] Lock mode: {(PersistentLock ? "PERSISTENT" : "STANDARD")}");
-                }
-
-                // ── Release lock ─────────────────────────────────────────────────
-                if (Input.GetKeyDown(Config.ReleaseLockKey) && _lockedTarget != null)
-                {
-                    if (Config.Dbg1) MelonLogger.Msg("[Missile] Lock released");
-                    _lockedTarget = null;
-                    HideLockIndicator();
-                }
-
-                if (Input.GetKeyDown(Config.GrenadeKey)) SpawnGrenade();
-                if (Input.GetKeyDown(Config.C4Key))      SpawnC4();
-                if (Input.GetKeyDown(Config.MineKey))    SpawnMine();
-
-                // ── Lock-on system ───────────────────────────────────────────────
-                if (Input.GetKey(Config.EnableLockOn))
+                // ── Lock-on: RMB held scans, LMB while scanning locks ────────────
+                if (SlotScanning)
                 {
                     _focusedTarget = ScanForTarget();
-                    if (Input.GetKeyDown(Config.LockOnTarget) && _focusedTarget != null)
+                    if (Input.GetMouseButtonDown(0) && _focusedTarget != null)
                     {
                         _lockedTarget = _focusedTarget;
                         if (Config.Dbg1) MelonLogger.Msg($"[Missile] Locked: '{_lockedTarget.gameObject.name}'");
@@ -154,16 +161,6 @@ namespace BombsAway
                     UpdateFocusIndicator(_focusedTarget);
                 else
                     HideFocusIndicator();
-
-                if (Input.GetKeyDown(Config.SpawnHomingMissile))
-                    TryLaunchMissile();
-
-                // ── Remote mode toggle ───────────────────────────────────────────
-                if (Input.GetKeyDown(Config.RemoteToggleKey))
-                {
-                    RemoteSequential = !RemoteSequential;
-                    MelonLogger.Msg($"[Remote] Mode: {(RemoteSequential ? "SEQUENTIAL (oldest first)" : "SIMULTANEOUS (all at once)")}");
-                }
 
                 ProcessRemoteDetonation();
             }
@@ -214,52 +211,26 @@ namespace BombsAway
             HideFocusIndicator();
         }
 
+        /// <summary>RMB with C4 in hand: oldest armed charge (FIFO) or all of them (SIMULTANEOUS).</summary>
         private static void ProcessRemoteDetonation()
         {
-            _pressedRemoteKeys.Clear();
-            bool anyRemote = false;
+            bool fire = Holding(Ordnance.C4) && Input.GetMouseButtonDown(1);
+
+            GrenadeState oldest = null;
+            int count = 0;
             foreach (var g in _grenades)
             {
                 if (g.Dead || g.Params.Detonation != DetonationMode.Remote) continue;
                 g.RemoteTriggered = false;
-                anyRemote = true;
-                if (g.Armed && Input.GetKeyDown(g.Params.RemoteKey))
-                    _pressedRemoteKeys.Add(g.Params.RemoteKey);
-            }
-            if (!anyRemote || _pressedRemoteKeys.Count == 0) return;
+                if (!fire || !g.Armed) continue;
 
-            foreach (var key in _pressedRemoteKeys)
-            {
-                if (RemoteSequential)
-                {
-                    GrenadeState oldest = null;
-                    for (int i = 0; i < _grenades.Count; i++)
-                    {
-                        var g = _grenades[i];
-                        if (g.Dead || !g.Armed) continue;
-                        if (g.Params.Detonation != DetonationMode.Remote) continue;
-                        if (g.Params.RemoteKey != key) continue;
-                        if (oldest == null || g.Timer > oldest.Timer) oldest = g;
-                    }
-                    if (oldest != null)
-                    {
-                        oldest.RemoteTriggered = true;
-                        if (Config.Dbg1) MelonLogger.Msg($"[Remote] Sequential: oldest on key={key}");
-                    }
-                }
-                else
-                {
-                    int count = 0;
-                    foreach (var g in _grenades)
-                    {
-                        if (g.Dead || !g.Armed) continue;
-                        if (g.Params.Detonation != DetonationMode.Remote) continue;
-                        if (g.Params.RemoteKey != key) continue;
-                        g.RemoteTriggered = true; count++;
-                    }
-                    if (Config.Dbg1) MelonLogger.Msg($"[Remote] Simultaneous: {count} on key={key}");
-                }
+                if (!RemoteSequential) { g.RemoteTriggered = true; count++; }
+                else if (oldest == null || g.Timer > oldest.Timer) oldest = g;
             }
+
+            if (oldest != null) { oldest.RemoteTriggered = true; count = 1; }
+            if (count > 0 && Config.Dbg1)
+                MelonLogger.Msg($"[Remote] {(RemoteSequential ? "Sequential" : "Simultaneous")}: {count} fired");
         }
 
         public override void OnLateUpdate()

@@ -60,20 +60,6 @@ namespace BombsAway
 
     public partial class Core
     {
-        private static Quaternion ThrowAndPredictAlign(GameObject obj, Rigidbody rb, Camera cam,
-            float throwForce, float throwArc)
-        {
-            Vector3 throwVel = (Quaternion.AngleAxis(throwArc, cam.transform.right)
-                                * cam.transform.forward) * throwForce;
-            rb.linearVelocity = throwVel;
-
-            Vector3 landNorm = ThrowArcCast(obj.transform.position, throwVel);
-            float tiltX = (float)(SharedRng.Instance.NextDouble() * 20.0 - 10.0);
-            float tiltZ = (float)(SharedRng.Instance.NextDouble() * 20.0 - 10.0);
-            return Quaternion.LookRotation(Vector3.Cross(landNorm, cam.transform.right), landNorm)
-                 * Quaternion.Euler(tiltX, 0f, tiltZ);
-        }
-
         private static Color[] SnapshotBaseColors(Renderer rend)
         {
             if (rend == null) return null;
@@ -84,87 +70,77 @@ namespace BombsAway
             return baseColors;
         }
 
-        private static void SpawnGrenade()
+        /// <summary>Body, rigidbody and state for one charge, at rest at <paramref name="position"/>.
+        /// Throwing and placing both start here; only what happens next differs.</summary>
+        private static GrenadeState CreateOrdnance(Ordnance o, Vector3 position)
         {
-            var cam = Camera.main;
-            if (cam == null) return;
-            var ep = ExplosionParams.FromGrenadeConfig(Vector3.zero);
+            ExplosionParams ep; string name; float scale, mass; PrimitiveType fallback;
+            switch (o)
+            {
+                case Ordnance.C4:
+                    ep = ExplosionParams.FromC4Config(Vector3.zero);
+                    name = "C4"; scale = 0.15f; mass = 0.75f; fallback = PrimitiveType.Sphere; break;
+                case Ordnance.Claymore:
+                    ep = ExplosionParams.FromClaymoreConfig(Vector3.zero);
+                    name = "Claymore"; scale = 0.15f; mass = 0.75f; fallback = PrimitiveType.Cube; break;
+                default:
+                    ep = ExplosionParams.FromGrenadeConfig(Vector3.zero);
+                    name = "Grenade"; scale = 0.1f; mass = 0.5f; fallback = PrimitiveType.Sphere; break;
+            }
 
-            Vector3 spawnPos = cam.transform.position + cam.transform.forward * 1f;
-            var obj = OrdnanceFactory.BuildBody(ep.MeshName, "Grenade", spawnPos, 0.1f,
-                PrimitiveType.Sphere, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend);
+            var obj = OrdnanceFactory.BuildBody(ep.MeshName, name, position, scale,
+                fallback, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend);
 
             var rb = obj.AddComponent(Il2CppType.Of<Rigidbody>()).TryCast<Rigidbody>();
-            rb.mass = 0.5f;
+            rb.mass = mass;
 
-            var alignTarget = ThrowAndPredictAlign(obj, rb, cam, Config.ThrowForce, Config.ThrowArc);
-
-            _grenades.Add(new GrenadeState
+            var g = new GrenadeState
             {
                 Obj = obj,
                 GrenadeRenderer = rend,
                 Rb = rb,
                 Params = ep,
                 BaseColors = SnapshotBaseColors(rend),
-                HasAlignTarget = true,
-                AlignTargetRot = alignTarget,
-            });
+            };
+            if (!ep.Sticky) ConfigurePhysicalBody(g);
+            return g;
         }
 
-        private static void SpawnC4()
-        {
-            var cam = Camera.main;
-            if (cam == null) return;
-            var ep = ExplosionParams.FromC4Config(Vector3.zero);
-
-            Vector3 spawnPos = cam.transform.position + cam.transform.forward * 1f;
-            var obj = OrdnanceFactory.BuildBody(ep.MeshName, "C4", spawnPos, 0.15f,
-                PrimitiveType.Sphere, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend);
-
-            var rb = obj.AddComponent(Il2CppType.Of<Rigidbody>()).TryCast<Rigidbody>();
-            rb.mass = 0.75f;
-
-            var alignTarget = ThrowAndPredictAlign(obj, rb, cam, Config.C4ThrowForce, Config.C4ThrowArc);
-
-            _grenades.Add(new GrenadeState
-            {
-                Obj = obj,
-                GrenadeRenderer = rend,
-                Rb = rb,
-                Params = ep,
-                BaseColors = SnapshotBaseColors(rend),
-                HasAlignTarget = true,
-                AlignTargetRot = alignTarget,
-            });
-        }
-
-        private static void SpawnMine()
+        private static void ThrowOrdnance(Ordnance o)
         {
             var cam = Camera.main;
             if (cam == null) return;
 
-            var ep = ExplosionParams.FromClaymoreConfig(Vector3.zero);
+            var g = CreateOrdnance(o, cam.transform.position + cam.transform.forward * 1f);
 
-            Vector3 spawnPos = cam.transform.position + cam.transform.forward * 1f;
-            var obj = OrdnanceFactory.BuildBody(ep.MeshName, "Claymore", spawnPos, 0.15f,
-                PrimitiveType.Cube, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend);
-
-            var rb = obj.AddComponent(Il2CppType.Of<Rigidbody>()).TryCast<Rigidbody>();
-            rb.mass = 0.75f;
-
-            var alignTarget = ThrowAndPredictAlign(obj, rb, cam, Config.MineThrowForce, Config.MineThrowArc);
-
-            _grenades.Add(new GrenadeState
+            float force, arc;
+            switch (o)
             {
-                Obj = obj,
-                GrenadeRenderer = rend,
-                Rb = rb,
-                Params = ep,
-                BaseColors = SnapshotBaseColors(rend),
-                HasAlignTarget = true,
-                AlignTargetRot = alignTarget,
-                ThrowDir = cam.transform.forward,
-            });
+                case Ordnance.C4:       force = Config.C4ThrowForce;   arc = Config.C4ThrowArc;   break;
+                case Ordnance.Claymore: force = Config.MineThrowForce; arc = Config.MineThrowArc; break;
+                default:                force = Config.ThrowForce;     arc = Config.ThrowArc;     break;
+            }
+
+            Vector3 velocity = ThrowVelocity(cam, force, arc);
+            try
+            {
+                if (g.Params.Sticky) LaunchScripted(g, velocity, cam);
+                else                 LaunchPhysical(g, velocity, cam);
+            }
+            catch (System.Exception e)
+            {
+                // Never leave a charge frozen and untracked: fall back to a plain physics throw.
+                MelonLogger.Warning($"[Throw] {o} launch failed, throwing it as a plain physics body: {e.Message}");
+                g.Ballistic = false;
+                if (g.Rb != null)
+                {
+                    g.Rb.isKinematic = false;
+                    g.Rb.linearVelocity = velocity;
+                }
+            }
+
+            _grenades.Add(g);
+            _lastThrowTime = Time.time;
         }
     }
 }

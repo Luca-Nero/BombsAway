@@ -13,76 +13,14 @@ namespace BombsAway
             var ep = g.Params;
             g.Timer += dt;
 
-            if (ep.Sticky && !g.Stuck && g.Obj != null && g.Timer > 0.05f)
+            // Sticky ordnance flies a scripted arc and sticks on its first contact
+            // (Ordnance.Flight.cs); a grenade is left entirely to physics.
+            if (g.Ballistic && !g.Stuck)
             {
-                var rb = g.Rb;
-                if (rb != null)
-                {
-                    float speed = rb.linearVelocity.magnitude;
-                    Vector3 velocity = rb.linearVelocity;
-
-                    if (speed > 0.1f)
-                    {
-                        float castDist = Mathf.Max(speed * Time.deltaTime * 2f, 0.15f);
-                        float castRadius = 0.04f;
-                        if (Physics.SphereCast(g.Obj.transform.position, castRadius,
-                            velocity.normalized, out RaycastHit hit, castDist,
-                            Config.WorldLayerMask, QueryTriggerInteraction.Ignore))
-                        {
-                            if (hit.collider.gameObject != g.Obj)
-                            {
-                                rb.linearVelocity = Vector3.zero;
-                                rb.angularVelocity = Vector3.zero;
-                                rb.isKinematic = !ExplosionSystem.IsLimb(hit.collider.gameObject);
-                                rb.mass = 0.01f;
-                                g.Stuck = true;
-                                g.Obj.transform.position = hit.point; // snap to surface
-
-                                Vector3 sNormal = hit.normal;
-                                Vector3 throwFwd = g.ThrowDir.sqrMagnitude > 0.01f
-                                    ? g.ThrowDir : g.Obj.transform.forward;
-                                Vector3 surfaceFwd = (throwFwd
-                                    - Vector3.Dot(throwFwd, sNormal) * sNormal);
-                                if (surfaceFwd.sqrMagnitude < 0.001f)
-                                {
-                                    surfaceFwd = Vector3.Cross(sNormal, Vector3.forward);
-                                    if (surfaceFwd.sqrMagnitude < 0.001f)
-                                        surfaceFwd = Vector3.Cross(sNormal, Vector3.up);
-                                }
-                                g.Obj.transform.rotation = Quaternion.LookRotation(
-                                    surfaceFwd.normalized, sNormal);
-                                ep.Forward = g.Obj.transform.forward;
-
-                                Vector3 stickyOffset = ep.Detonation switch
-                                {
-                                    DetonationMode.Remote => new Vector3(Config.C4LocalOffsetX,
-                                                                            Config.C4LocalOffsetY,
-                                                                            Config.C4LocalOffsetZ),
-                                    DetonationMode.Proximity => new Vector3(Config.MineLocalOffsetX,
-                                                                            Config.MineLocalOffsetY,
-                                                                            Config.MineLocalOffsetZ),
-                                    _ => Vector3.zero,
-                                };
-                                g.Obj.transform.position += g.Obj.transform.TransformDirection(stickyOffset);
-
-                                if (ep.Detonation == DetonationMode.Proximity)
-                                    CreateSightLines(g);
-
-                                var hostRb = hit.collider.attachedRigidbody;
-                                if (hostRb != null && !hostRb.isKinematic && ExplosionSystem.IsLimb(hit.collider.gameObject))
-                                {
-                                    g.HostRb = hostRb;
-                                    g.LocalOffset = hostRb.transform.InverseTransformPoint(g.Obj.transform.position);
-                                    g.LocalRotation = Quaternion.Inverse(hostRb.transform.rotation) * g.Obj.transform.rotation;
-
-                                    var ownCollider = g.Obj.GetComponent<Collider>();
-                                    if (ownCollider != null) ownCollider.enabled = false;
-                                }
-                            }
-                        }
-                    }
-                }
+                TickScriptedFlight(g, dt);
+                if (g.Dead) return;
             }
+
             // ── Arming ────────────────────────────────────────────────
             if (!g.Armed && g.Timer >= ep.ArmDelay)
             {
@@ -99,37 +37,6 @@ namespace BombsAway
 
             if (g.Stuck && g.SightLines != null)
                 UpdateSightLines(g);
-
-            // ── In-flight tumble & surface pre-alignment ──────────────────────
-            if (!g.Stuck && g.Obj != null)
-            {
-                var rb = g.Rb;
-                if (rb != null)
-                {
-                    Vector3 vel = rb.linearVelocity;
-                    float speed = vel.magnitude;
-
-                    if (speed > 0.1f)
-                    {
-                        float rollRate = 360f + speed * 12f;   // deg/s
-
-                        Vector3 rollAxis = vel.normalized;
-                        Quaternion rollDelta = Quaternion.AngleAxis(
-                            rollRate * dt, rollAxis);
-
-                        if (g.HasAlignTarget)
-                        {
-                            float slerpT = Mathf.Clamp01(dt / 1.5f);
-                            g.Obj.transform.rotation = Quaternion.Slerp(
-                                g.Obj.transform.rotation,
-                                g.AlignTargetRot,
-                                slerpT);
-                        }
-
-                        g.Obj.transform.rotation = rollDelta * g.Obj.transform.rotation;
-                    }
-                }
-            }
 
             // ── Detonation check (mode-specific) ─────────────────────
             bool detonate = false;
@@ -208,32 +115,61 @@ namespace BombsAway
                 Explode(g);
         }
 
-        private static Vector3 ThrowArcCast(Vector3 origin, Vector3 velocity)
+        // ── Sticking: shared by a thrown charge landing and a charge placed by hand ──
+
+        /// <summary>Up along the surface normal, forward along <paramref name="fwdHint"/>
+        /// flattened onto the surface - so a claymore faces the way it was aimed.</summary>
+        internal static Quaternion SurfaceRotation(Vector3 normal, Vector3 fwdHint)
         {
-            float gy = Physics.gravity.y;
-            float groundY = origin.y - 200f;
-
-            if (Physics.Raycast(origin, Vector3.down, out RaycastHit groundProbe, 200f,
-                Config.WorldLayerMask, QueryTriggerInteraction.Ignore))
-                groundY = groundProbe.point.y;
-
-            float flightTime = ExplosionSystem.BallisticGroundTime(
-                gy, velocity.y, origin.y - groundY, Config.Fuse);
-
-            int steps = Mathf.Max(2, Config.ArcDebugSteps);
-            Vector3 prev = origin;
-            for (int s = 1; s <= steps; s++)
+            Vector3 surfaceFwd = fwdHint - Vector3.Dot(fwdHint, normal) * normal;
+            if (surfaceFwd.sqrMagnitude < 0.001f)
             {
-                float ft = flightTime * ((float)s / steps);
-                Vector3 pt = origin + velocity * ft
-                           + new Vector3(0f, 0.5f * gy * ft * ft, 0f);
-                Vector3 seg = pt - prev;
-                if (Physics.Raycast(prev, seg.normalized, out RaycastHit hit, seg.magnitude,
-                    Config.WorldLayerMask, QueryTriggerInteraction.Ignore))
-                    return hit.normal;   // ← surface normal at predicted landing
-                prev = pt;
+                surfaceFwd = Vector3.Cross(normal, Vector3.forward);
+                if (surfaceFwd.sqrMagnitude < 0.001f)
+                    surfaceFwd = Vector3.Cross(normal, Vector3.up);
             }
-            return Vector3.up;           // no hit — default to world-up
+            return Quaternion.LookRotation(surfaceFwd.normalized, normal);
+        }
+
+        /// <summary>Local offset of a stuck charge from the hit point (the Placement config).</summary>
+        internal static Vector3 StickOffset(DetonationMode mode) => mode switch
+        {
+            DetonationMode.Remote    => new Vector3(Config.C4LocalOffsetX, Config.C4LocalOffsetY, Config.C4LocalOffsetZ),
+            DetonationMode.Proximity => new Vector3(Config.MineLocalOffsetX, Config.MineLocalOffsetY, Config.MineLocalOffsetZ),
+            _ => Vector3.zero,
+        };
+
+        /// <summary>Pins a charge at a final pose on <paramref name="host"/>. Anything with a
+        /// rigidbody carries it along - a limb, a crate, a limb the puppeteer drives
+        /// kinematically; the static world just holds it.</summary>
+        private static void StickAt(GrenadeState g, Vector3 pos, Quaternion rot, Collider host)
+        {
+            var rb = g.Rb;
+            bool onLimb = ExplosionSystem.IsLimb(host.gameObject);
+            if (rb != null)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.isKinematic = !onLimb;
+                rb.mass = 0.01f;
+            }
+            g.Stuck = true;
+            g.Obj.transform.SetPositionAndRotation(pos, rot);
+            g.Params.Forward = g.Obj.transform.forward;
+
+            if (g.Params.Detonation == DetonationMode.Proximity)
+                CreateSightLines(g);
+
+            var hostRb = host.attachedRigidbody;
+            if (hostRb != null)
+            {
+                g.HostRb = hostRb;
+                g.LocalOffset = hostRb.transform.InverseTransformPoint(pos);
+                g.LocalRotation = Quaternion.Inverse(hostRb.transform.rotation) * rot;
+
+                var ownCollider = g.Obj.GetComponent<Collider>();
+                if (ownCollider != null) ownCollider.enabled = false;
+            }
         }
 
         private static void Explode(GrenadeState g)

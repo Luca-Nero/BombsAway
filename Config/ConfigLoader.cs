@@ -14,9 +14,7 @@ namespace BombsAway
     // ══════════════════════════════════════════════════════════════════════════════
     internal static class ConfigLoader
     {
-        public static string IniPath => Path.Combine(
-            Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location),
-            "GrenadeConfig.ini");
+        public static string IniPath => FruitLib.FruitPaths.Config("GrenadeConfig.ini", typeof(ConfigLoader).Assembly);
         private static string ConfigPath => IniPath;
 
         public static void Load()
@@ -56,18 +54,11 @@ namespace BombsAway
 
         private static readonly Dictionary<string, string> FieldHelp = new Dictionary<string, string>
         {
-            ["GrenadeKey"] = "key to throw grenade",
-            ["C4Key"] = "key to throw / place C4",
-            ["MineKey"] = "key to throw / place claymore",
-            ["EnableLockOn"] = "hold to enable missile lock-on",
-            ["LockOnTarget"] = "key to lock focused target",
-            ["SpawnHomingMissile"] = "key to fire homing missile",
-            ["DetonateKey"] = "key to detonate placed C4",
-            ["RemoteToggleKey"] = "key to toggle sequential/simultaneous remote mode",
-            ["AttackModeKey"] = "key to toggle missile TOP / DIRECT / UNGUIDED attack",
-            ["LockModeKey"] = "key to toggle missile lock mode",
-            ["WarheadModeKey"] = "key to toggle HEAT / HE warhead",
-            ["ReleaseLockKey"] = "key to clear current missile lock",
+            ["RemoteToggleKey"] = "with C4 in hand: toggle FIFO / simultaneous remote detonation",
+            ["AttackModeKey"] = "with the missile in hand: cycle TOP / DIRECT / UNGUIDED attack",
+            ["LockModeKey"] = "with the missile in hand: toggle persistent / standard lock",
+            ["WarheadModeKey"] = "with the missile in hand: toggle HEAT / HE warhead",
+            ["ReleaseLockKey"] = "with the missile in hand: clear the current lock",
 
             ["Fuse"] = "seconds before detonation",
             ["FlashRate"] = "LED blink interval in final seconds",

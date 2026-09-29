@@ -8,26 +8,30 @@ namespace BombsAway
 
         private static void BuildHud(HudPanel p)
         {
-            // C4 remote mode
-            string remoteMode = RemoteSequential ? "FIFO" : "SIMULTANEOUS";
-            p.Line($"{Config.RemoteToggleKey} | C4 DET:  {remoteMode}");
-
-            // Missile attack mode + lock mode
-            string atkMode = MissileAttackMode switch
+            // Only what the slot in hand needs: C4 its remote mode, the missile its settings.
+            if (Equipped && Selected == Ordnance.C4)
             {
-                AttackMode.Top => "TOP ATTACK",
-                AttackMode.Direct => "DIRECT",
-                AttackMode.Unguided => "UNGUIDED",
-                _ => "?"
-            };
-            string lockMode = PersistentLock ? "PERSIST" : "STD";
-            string warhead = MissileWarheadMode == WarheadMode.HEAT ? "HEAT" : "HE";
-            p.Line($"{Config.AttackModeKey}/{Config.WarheadModeKey}/{Config.LockModeKey}  | MISSILE: {atkMode} | {warhead} | {lockMode}");
+                string remoteMode = RemoteSequential ? "FIFO" : "SIMULTANEOUS";
+                p.Line($"{Config.RemoteToggleKey} | C4 DET:  {remoteMode}");
+            }
+            else if (Equipped && Selected == Ordnance.Missile)
+            {
+                string atkMode = MissileAttackMode switch
+                {
+                    AttackMode.Top => "TOP ATTACK",
+                    AttackMode.Direct => "DIRECT",
+                    AttackMode.Unguided => "UNGUIDED",
+                    _ => "?"
+                };
+                string lockMode = PersistentLock ? "PERSIST" : "STD";
+                string warhead = MissileWarheadMode == WarheadMode.HEAT ? "HEAT" : "HE";
+                p.Line($"{Config.AttackModeKey}/{Config.WarheadModeKey}/{Config.LockModeKey}  | MISSILE: {atkMode} | {warhead} | {lockMode}");
 
-            if (_lockedTarget != null)
-                p.Line("LOCK:    LOCKED", HudPanel.Bad);
-            else if (_focusedTarget != null)
-                p.Line("LOCK:    TRACKING", HudPanel.Warn);
+                if (_lockedTarget != null)
+                    p.Line("LOCK:    LOCKED", HudPanel.Bad);
+                else if (_focusedTarget != null)
+                    p.Line("LOCK:    TRACKING", HudPanel.Warn);
+            }
 
             if (Config.Dbg1)
             {

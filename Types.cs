@@ -41,9 +41,18 @@ namespace BombsAway
         public bool Armed;
         public float ProxScanAccum;
         public bool RemoteTriggered;
-        public bool HasAlignTarget;
-        public Quaternion AlignTargetRot;
         public Vector3 ThrowDir;
+
+        // Scripted flight (sticky ordnance): see Ordnance.Flight.cs.
+        public bool Ballistic;
+        public Vector3 Velocity;
+        public float FlightTime;
+        public float CastRadius;
+        public Vector3 SpinAxis;
+        public float SpinRate;
+        public bool HasLanding;
+        public float LandTime;
+        public Quaternion LandRot;
         public LineRenderer[] SightLines;
     }
 
@@ -92,7 +101,6 @@ namespace BombsAway
         public DetonationMode Detonation = DetonationMode.Timer;
         public float FuseTime = 2f;
         public float FlashTime = 2f;
-        public KeyCode RemoteKey = Config.DetonateKey;
         public float ProximityRadius = 2f;
         public float ProximityHSpreadDeg = 360f;
         public float ProximityVSpreadDeg = 360f;

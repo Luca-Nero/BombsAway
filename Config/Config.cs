@@ -5,13 +5,6 @@ namespace BombsAway
     internal static class Config
     {
         // ── Controls ──────────────────────────────────────────────────────────────
-        [FruitLib.MenuCategory("Controls")] public static KeyCode GrenadeKey = KeyCode.G;
-        [FruitLib.MenuCategory("Controls")] public static KeyCode C4Key = KeyCode.H;
-        [FruitLib.MenuCategory("Controls")] public static KeyCode MineKey = KeyCode.J;
-        [FruitLib.MenuCategory("Controls")] public static KeyCode EnableLockOn = KeyCode.V;
-        [FruitLib.MenuCategory("Controls")] public static KeyCode LockOnTarget = KeyCode.Q;
-        [FruitLib.MenuCategory("Controls")] public static KeyCode SpawnHomingMissile = KeyCode.E;
-        [FruitLib.MenuCategory("Controls")] public static KeyCode DetonateKey = KeyCode.F;
         [FruitLib.MenuCategory("Controls")] public static KeyCode RemoteToggleKey = KeyCode.F1;
         [FruitLib.MenuCategory("Controls")] public static KeyCode AttackModeKey = KeyCode.F2;
         [FruitLib.MenuCategory("Controls")] public static KeyCode WarheadModeKey = KeyCode.F3;
@@ -135,7 +128,29 @@ namespace BombsAway
         [FruitLib.MenuCategory("Effects")] public static bool AdaptiveQuality = true;
         [FruitLib.MenuCategory("Effects")] public static float MinQualityScale = 0.25f;
 
+        // ── Throwing ──────────────────────────────────────────────────────────────
+        // C4 / claymore tumble end over end in flight and roll into their landing pose.
+        [FruitLib.MenuCategory("Throwing")] public static float ThrowTumbleRate = 540f;
+        [FruitLib.MenuCategory("Throwing")] public static float ThrowTumbleVariance = 0.25f;
+        // The grenade is physical: launch spin (deg/s), bounce, friction, how fast it stops rolling.
+        [FruitLib.MenuCategory("Throwing")] public static float GrenadeTumbleRate = 600f;
+        [FruitLib.MenuCategory("Throwing")] public static float GrenadeBounciness = 0.3f;
+        [FruitLib.MenuCategory("Throwing")] public static float GrenadeFriction = 0.6f;
+        [FruitLib.MenuCategory("Throwing")] public static float GrenadeRollDamping = 0.4f;
+
         // ── Placement ─────────────────────────────────────────────────────────────
+        [FruitLib.MenuCategory("Placement")] public static bool PlacementEnabled = true;
+        [FruitLib.MenuCategory("Placement")] public static float PlaceDistance = 2.5f;
+        [FruitLib.MenuCategory("Placement")] public static bool ShowPlacementHologram = true;
+        // No placing for this long after a throw, so the preview never lands on the round in flight.
+        [FruitLib.MenuCategory("Placement")] public static float PlaceCooldownAfterThrow = 0.4f;
+        // Yaw about the surface normal: the game's own rotate mode (hold its rotate key, move the
+        // mouse), and hold PlaceRotateKey + wheel for fixed steps. A small random yaw per placement.
+        [FruitLib.MenuCategory("Placement")] public static bool UseGameRotationMode = true;
+        [FruitLib.MenuCategory("Placement")] public static float PlaceRotateSensitivity = 3f;
+        [FruitLib.MenuCategory("Placement")] public static KeyCode PlaceRotateKey = KeyCode.R;
+        [FruitLib.MenuCategory("Placement")] public static float PlaceRotateStep = 15f;
+        [FruitLib.MenuCategory("Placement")] public static float PlaceYawJitter = 6f;
         [FruitLib.MenuCategory("Placement")] public static float C4LocalOffsetX = 0f;
         [FruitLib.MenuCategory("Placement")] public static float C4LocalOffsetY = 0.05f;
         [FruitLib.MenuCategory("Placement")] public static float C4LocalOffsetZ = 0f;
@@ -151,6 +166,8 @@ namespace BombsAway
         [FruitLib.MenuCategory("Debug")] public static int DebugLevel = 0;
         [FruitLib.MenuCategory("Debug")] public static int FragLayerMask  = ~0;
         [FruitLib.MenuCategory("Debug")] public static int WorldLayerMask = ~0;
+        // Placement probe (temporary): F9 reports what the game's hologram needs.
+        [FruitLib.MenuCategory("Debug")] public static KeyCode PlacementProbeKey = KeyCode.F9;
 
         // ── Helpers (not shown in menu) ───────────────────────────────────────────
         public static float CamFX(float baseVal) =>

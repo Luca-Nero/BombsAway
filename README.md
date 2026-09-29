@@ -1,34 +1,34 @@
 # BombsAway!
 
 ![Version](https://img.shields.io/github/v/release/Luca-Nero/BombsAway?style=flat-square)
-![Game Version](https://img.shields.io/badge/Game-v0.1%2B-blue?style=flat-square)
+![Game Version](https://img.shields.io/badge/Game-Release-blue?style=flat-square)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-ff5e5b?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/Luca_Nero)
 
-Fully physics-simulated ordnance for FRUKT. Throw fragmentation grenades, stick C4 to anything and blow it remotely, cover a corridor with a directional Claymore, or put a Javelin anti-tank missile through a rooftop. Every blast does real ray-traced fragmentation, overpressure wounding, and camera shake - nothing is faked with a damage sphere.
+Fully physics-simulated ordnance for FRUKT, each its own item on the inventory's Weapons shelf - put them on your toolbar, left click to use. Throw fragmentation grenades, stick C4 to anything and blow it remotely, cover a corridor with a directional Claymore, or put a Javelin anti-tank missile through a rooftop. Every blast does real ray-traced fragmentation, overpressure wounding, and camera shake - nothing is faked with a damage sphere.
 
 ---
 
 ## Features
 
-- **Fragmentation Grenade:** Press **G** to throw. Fuse-timed, with a ray-traced frag pattern (2000 rays by default) that wounds every limb it actually hits.
+- **Fragmentation Grenade:** Left click to throw. Fuse-timed, with a ray-traced frag pattern (2000 rays by default) that wounds every limb it actually hits.
     - **Overpressure:** A separate falloff-driven blast wave wounds bodies inside the overpressure radius, independent of shrapnel.
-- **C4 Charge:** Press **H** to place - it sticks to walls, crates, and Bobs. Press **F** to detonate.
-    - **Remote Modes:** Multiple charges fire sequentially (oldest first) by default. Press **F1** to switch to simultaneous.
-- **Claymore Mine:** Press **J** to place. Sticky, but self-triggering - anything entering its directional proximity cone sets it off. Three red sightlines on the face show the cone at a glance.
+- **C4 Charge:** Left click to place - it sticks to walls, crates, and Bobs. Right click to detonate.
+    - **Remote Modes:** Multiple charges fire sequentially (oldest first) by default. Press **F1** (C4 in hand) to switch to simultaneous.
+- **Claymore Mine:** Left click to place. Sticky, but self-triggering - anything entering its directional proximity cone sets it off. Three red sightlines on the face show the cone at a glance.
     - **Directional Blast:** High-velocity frag (45 m/s) thrown forward through the cone rather than spherically.
-- **Javelin Anti-Tank Missile:** Press **E** to launch. The flight model is built from two aerospace papers on the real FGM-148 - piecewise-linear thrust curve, soft launch at 18° with an ejection impulse, four-phase flight, aerodynamic drag (F = ½ρV²CdA), and Proportional Navigation guidance in the terminal phase.
+- **Javelin Anti-Tank Missile:** Left click to launch. The flight model is built from two aerospace papers on the real FGM-148 - piecewise-linear thrust curve, soft launch at 18° with an ejection impulse, four-phase flight, aerodynamic drag (F = ½ρV²CdA), and Proportional Navigation guidance in the terminal phase.
     - **Three Attack Modes (F2):** TOP ATTACK climbs to 40 m and dives; DIRECT takes a flatter 15 m approach; UNGUIDED flies ballistic along your camera forward and needs no lock.
     - **Two Warheads (F3):** HEAT is a directional shaped charge with a narrow cone; HE is a full-sphere burst with a much larger radius.
-- **Lock-On System:** Hold **V** to scan, **Q** to confirm the lock, **B** to release. A CLU-style bracket tracks the nearest valid rigidbody in your cone of view.
+- **Lock-On System:** Hold **right click** to scan, **left click** while holding to confirm the lock, **B** to release. A CLU-style bracket tracks the nearest valid rigidbody in your cone of view.
     - **Persistent Lock (F4):** Hold the lock through multiple shots instead of clearing it after each launch.
-- **HUD Panel:** Remote mode, attack mode, warhead, lock mode, lock state, and live in-flight telemetry (flight phase, motor burn/coast, current speed) while a missile is airborne.
+- **HUD Panel:** Shows only what the item in hand needs - remote mode with C4; attack mode, warhead, lock mode and lock state with the Javelin. Debug mode adds live in-flight telemetry (flight phase, motor burn/coast, current speed).
 - **Adaptive Quality:** Ray, wound, and debris counts scale down automatically under frame pressure and recover once the budget frees up, instead of hitching.
 - **QoL Tweaks:** Per-ordnance blast tuning, configurable physics layer masks for blast and world queries, camera shake intensity and VFX intensity sliders, and placement offsets for C4 and Claymore.
 
 ## Requirements & Compatibility
 
 - **Prerequisites:** MelonLoader 0.7.2+ Installation. [Check out their Tutorial!](https://melonwiki.xyz/#/)
-- **Prerequisites:** [FruitLib](https://github.com/Luca-Nero/FruitLib) in your `Mods/` folder - BombsAway uses it for the config menu, HUD, performance monitor, and mesh loading.
+- **Prerequisites:** [FruitLib](https://github.com/Luca-Nero/FruitLib) 4.0.0+ in your `Mods/` folder - BombsAway uses it for the config menu, HUD, performance monitor, and mesh loading.
 - **Compatibility:** No known Incompatabilities.
 
 ## Installation
@@ -39,20 +39,19 @@ Fully physics-simulated ordnance for FRUKT. Throw fragmentation grenades, stick 
 
 ## Controls (Defaults)
 
-| Key | Action |
+Grenade, C4, Claymore and Javelin are separate items on the inventory's Weapons shelf. Put the ones you want on your toolbar, select one, then:
+
+| Input | Action |
 |-----|--------|
-| G | Throw grenade |
-| H | Place C4 |
-| J | Place Claymore mine |
-| F | Detonate C4 (remote) |
-| F1 | Toggle sequential / simultaneous remote mode |
-| V (hold) | Scan for missile target |
-| Q | Confirm lock |
-| B | Release lock |
-| E | Launch missile |
-| F2 | Cycle attack mode (TOP ATTACK / DIRECT / UNGUIDED) |
-| F3 | Toggle HEAT / HE warhead |
-| F4 | Toggle persistent / standard lock |
+| Left click | Throw grenade, place C4 or Claymore, launch Javelin |
+| Right click (C4) | Detonate placed charges |
+| F1 (C4) | Toggle sequential / simultaneous remote mode |
+| Right click hold (Javelin) | Scan for target |
+| Left click while scanning (Javelin) | Confirm lock |
+| B (Javelin) | Release lock |
+| F2 (Javelin) | Cycle attack mode (TOP ATTACK / DIRECT / UNGUIDED) |
+| F3 (Javelin) | Toggle HEAT / HE warhead |
+| F4 (Javelin) | Toggle persistent / standard lock |
 
 ## Configuration
 
