@@ -73,11 +73,22 @@ namespace BombsAway
             s.FragMaxTime = p.FragMaxTime;
             s.FragImpulse = p.FragImpulse;
             s.FragPower   = p.FragPower;
+            s.ChargeKgTNT = p.ChargeKgTNT;
             s.ArcSteps    = p.ArcSteps;
+            // What the fragments are: with FragPower this sets their real speed, and how well
+            // they go through walls (FruitLib 5.4).
+            s.FragMassGrams = FragmentGrams(p.Kind);
+            s.JetRays        = p.JetRays;
+            s.JetConeDeg     = p.JetConeDeg;
+            s.JetPenetration = p.JetPenetration;
+            s.JetPower       = p.JetPower;
+            s.JetSpallCount  = p.JetSpallCount;
 
             // WoundIntensity used to scale the old cone; it now scales every wound.
             s.DamageScale = p.DamageScale * Mathf.Max(0f, Config.WoundIntensity);
-            s.MaxWounds   = Mathf.Max(1, Config.MaxWoundsPerExplosion);
+            // 0 = unlimited, as the setting says.
+            s.MaxWounds   = Config.MaxWoundsPerExplosion > 0 ? Config.MaxWoundsPerExplosion : 1000000;
+            s.SecondaryMaxWounds =s.MaxWounds >= 1000000 ? 1000000 : Mathf.Max(1, s.MaxWounds / 2);
 
             s.AdaptiveQuality = Config.AdaptiveQuality;
             s.MinQuality      = Config.MinQualityScale;
@@ -92,6 +103,24 @@ namespace BombsAway
 
             FruitBallistics.Register(s);
             return s;
+        }
+
+        /// <summary>
+        /// One fragment's mass per explosive. A grenade's notched liner breaks into small, very
+        /// fast pieces (~1250 m/s at its power); a claymore throws 0.7 g steel balls (~1200 m/s,
+        /// as the M18A1's); C4 has no casing, so its "fragments" are heavier, slower debris; the
+        /// warheads' casings break up in between.
+        /// </summary>
+        private static float FragmentGrams(string kind)
+        {
+            switch (kind)
+            {
+                case "Grenade":   return 0.5f;
+                case "Claymore":  return 0.7f;
+                case "C4":        return 4f;
+                case "MissileHE": return 1.5f;
+                default:          return 2f;
+            }
         }
 
         // ── Visuals: BombsAway's own explosives only ─────────────────────────

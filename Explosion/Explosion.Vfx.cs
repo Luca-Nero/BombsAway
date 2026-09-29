@@ -380,6 +380,9 @@ namespace BombsAway
             rb.angularVelocity = spinAxis * spinRate * Mathf.Deg2Rad * 0.2f;
             var boxCol = chunk.AddComponent<BoxCollider>();
             boxCol.size = Vector3.one;
+            // Ignore Raycast, as FruitLib's ejecta: a landed chunk must not stop the next
+            // explosion's fragments (they skip layer 2), or catch rounds.
+            chunk.layer = 2;
 
             float settleTime = Config.DebrisLifetime;
             float settleElapsed = 0f;

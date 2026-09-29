@@ -17,7 +17,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.2.0";
+        public const string Version = "5.3.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -34,7 +34,7 @@ namespace BombsAway
 
         // ── FruitLib dependency ──────────────────────────────────────────────
         // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
-        private const int LibMajor = 4, LibMinor = 0, LibPatch = 0;
+        private const int LibMajor = 5, LibMinor = 4, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()
@@ -58,7 +58,7 @@ namespace BombsAway
             ConfigLoader.Load();
             Meshes = new FruitMeshLibrary(System.Reflection.Assembly.GetExecutingAssembly());
             ExplosionSystem.Init();
-            FruitMenu.Register("BombsAway", ConfigLoader.IniPath, typeof(Config));
+            FruitMenu.Register("BombsAway", ConfigLoader.IniPath, typeof(Config), ConfigLoader.Write);
             FruitHud.Register("BombsAway", BuildHud, order: 10);
             RegisterLoadout();
 
@@ -80,7 +80,9 @@ namespace BombsAway
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void UpdateBody()
         {
+            ExplosionDebugDraw.Tick();
             PlacementProbe.Tick(!FruitMenu.IsInputSuppressed);
+            TestBench.Tick(!FruitMenu.IsInputSuppressed);
             TickPlacement();
 
             if (!FruitMenu.IsInputSuppressed)

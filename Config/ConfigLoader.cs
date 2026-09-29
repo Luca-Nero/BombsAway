@@ -86,8 +86,18 @@ namespace BombsAway
             ["WoundIntensity"] = "scales every explosive wound: fragment power and overpressure damage",
             ["FragPower"] = "wound power of one grenade fragment at the charge (FruitLib ballistics; a 7.62 rifle round is ~15000)",
             ["C4FragPower"] = "wound power of one C4 fragment at the charge",
+            ["ChargeKgTNT"] = "grenade filler as kg of TNT (an M67's 180 g of Comp B is ~0.2). Drives the blast wave: lungs, then gut, then skin, then limbs give way as the pressure rises. 0 = old fixed-radius overpressure",
+            ["C4ChargeKgTNT"] = "C4 charge as kg of TNT (one M112 block ~0.75)",
+            ["MineChargeKgTNT"] = "claymore charge as kg of TNT (M18A1 ~0.9); its blast follows the claymore's cone",
+            ["MissileChargeKgTNT"] = "HEAT warhead's blast as kg of TNT; most of a HEAT charge goes into the jet",
+            ["MissileHEChargeKgTNT"] = "HE warhead as kg of TNT",
             ["MineFragPower"] = "wound power of one claymore ball at the charge",
             ["MissileFragPower"] = "wound power of one HEAT warhead fragment at the charge",
+            ["MissileJetPenetration"] = "metres of wall the HEAT jet goes through without losing anything, spread over every wall it meets; past that it slows like any fragment",
+            ["MissileJetRays"] = "fragments in the HEAT jet, fired down the missile's axis (0 = no jet)",
+            ["MissileJetConeDeg"] = "full angle of the HEAT jet, degrees",
+            ["MissileJetPower"] = "wound power of one HEAT jet ray (a rifle round is ~15000); the missile's damage scale applies on top",
+            ["MissileJetSpallCount"] = "fragments of wall the HEAT jet blows out of the back of each wall it goes through - what kills behind cover (0 = none)",
             ["MissileHEFragPower"] = "wound power of one HE warhead fragment at the charge",
             ["MaxWoundsPerExplosion"] = "hard cap on ApplyWound calls per detonation — keeps the game's wound queue from stalling (lower = faster, 0 = unlimited)",
 
@@ -101,6 +111,17 @@ namespace BombsAway
             ["MinQualityScale"] = "AdaptiveQuality floor — 0.25 = never drop below a quarter of configured counts",
 
             ["DebugLevel"] = "0 = silent, 1 = key events, 2 = verbose",
+            ["DebugDrawExplosions"] = "draw each fragment path and blast line of a detonation (red = lodged, magenta = through a limb, yellow = ricochet, cyan = through a wall, orange = stopped) and log a summary per explosion",
+            ["DebugDrawSeconds"] = "how long each debug line stays on screen (s)",
+            ["DebugDrawMaxLines"] = "debug line pool size; when full the oldest line is reused",
+            ["DebugDrawSpentEvery"] = "draw only every Nth fragment that hit nothing (they are most of them); 1 = all",
+            ["TestBenchKey"] = "puts a row of test walls across your view (replacing the last); with Shift it removes them (None to disable)",
+            ["TestBenchWalls"] = "how many test walls",
+            ["TestBenchThickness"] = "thickness of each test wall, metres",
+            ["TestBenchGap"] = "air gap between test walls, metres",
+            ["TestBenchDistance"] = "how far ahead the first test wall stands, metres",
+            ["TestBenchMaterial"] = "what the test walls are made of, by FruitLib surface name: Concrete, Brick, Steel, Wood, Drywall, Glass, Soil, Water",
+            ["DebugDrawBlast"] = "also draw shockwave / overpressure lines to each body and limb (green = open, red = covered) with a cross where cover blocks them",
             ["FragLayerMask"] = "physics layer bitmask for blast / wound queries",
             ["WorldLayerMask"] = "physics layer bitmask for world-collision queries (sticky, impact, arc prediction)",
         };
@@ -109,7 +130,7 @@ namespace BombsAway
             t == typeof(bool) || t == typeof(float) || t == typeof(int) ||
             t == typeof(string) || t == typeof(KeyCode);
 
-        private static void Write()
+        internal static void Write()
         {
             var sb = new StringBuilder();
 
@@ -120,6 +141,7 @@ namespace BombsAway
             sb.AppendLine();
 
             var categories = new List<string>();
+            var advanced   = new List<FieldInfo>();   // no [MenuCategory]: ini-only, not in the menu
             var byCategory = new Dictionary<string, List<FieldInfo>>();
 
             foreach (var f in typeof(Config).GetFields(BindingFlags.Public | BindingFlags.Static))
@@ -127,7 +149,7 @@ namespace BombsAway
                 if (f.IsSpecialName || !IsRenderable(f.FieldType)) continue;
                 var attr = (FruitLib.MenuCategoryAttribute)Attribute.GetCustomAttribute(
                     f, typeof(FruitLib.MenuCategoryAttribute));
-                if (attr == null) continue; // not a user-facing setting
+                if (attr == null) { advanced.Add(f); continue; }
 
                 if (!byCategory.TryGetValue(attr.Name, out var list))
                 {
@@ -142,6 +164,18 @@ namespace BombsAway
             {
                 sb.AppendLine($"# ── {cat} ──");
                 foreach (var f in byCategory[cat])
+                {
+                    if (FieldHelp.TryGetValue(f.Name, out var help))
+                        sb.AppendLine($"# {f.Name} : {help}");
+                    sb.AppendLine($"{f.Name} = {FormatValue(f)}");
+                }
+                sb.AppendLine();
+            }
+
+            if (advanced.Count > 0)
+            {
+                sb.AppendLine("# ── Advanced (ini only, not in the menu) ──");
+                foreach (var f in advanced)
                 {
                     if (FieldHelp.TryGetValue(f.Name, out var help))
                         sb.AppendLine($"# {f.Name} : {help}");

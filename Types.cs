@@ -125,6 +125,14 @@ namespace BombsAway
         public float DamageScale = 1f;
         /// <summary>Wound power of one fragment at the charge (FruitBallistics).</summary>
         public int FragPower = 3000;
+        /// <summary>The charge as kg of TNT: drives FruitLib's physical overpressure (0 = old radius model).</summary>
+        public float ChargeKgTNT = 0f;
+        /// <summary>Shaped-charge jet (FruitBallistics 5.4): rays, full cone angle, free metres through walls.</summary>
+        public int JetRays = 0;
+        public float JetConeDeg = 3f;
+        public float JetPenetration = 0f;
+        public int JetPower = 0;
+        public int JetSpallCount = 0;
         public int ArcSteps = 12;
         public float DebrisRaysRatio = 0.04f;
         public bool CameraFX = true;
@@ -136,6 +144,7 @@ namespace BombsAway
             {
                 Kind = "Grenade",
                 FragPower = Config.FragPower,
+                ChargeKgTNT = Config.ChargeKgTNT,
                 MeshName = "TAG19_mesh",
                 Sticky = false,
 
@@ -174,6 +183,7 @@ namespace BombsAway
             {
                 Kind = "C4",
                 FragPower = Config.C4FragPower,
+                ChargeKgTNT = Config.C4ChargeKgTNT,
                 MeshName = UnityEngine.Random.Range(1, 10000000) == 1 ? "Car46_mesh" : "C4_mesh",
                 Sticky = true,
 
@@ -210,6 +220,7 @@ namespace BombsAway
             {
                 Kind = "Claymore",
                 FragPower = Config.MineFragPower,
+                ChargeKgTNT = Config.MineChargeKgTNT,
                 MeshName = "Claymore_mesh",
                 Sticky = true,
 
@@ -251,6 +262,7 @@ namespace BombsAway
             {
                 Kind = "Missile",
                 FragPower = Config.MissileFragPower,
+                ChargeKgTNT = Config.MissileChargeKgTNT,
                 MeshName = "Javelin_mesh",
                 Sticky = false,
 
@@ -281,6 +293,12 @@ namespace BombsAway
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MissileDamageScale,
+
+                JetRays = Config.MissileJetRays,
+                JetConeDeg = Config.MissileJetConeDeg,
+                JetPenetration = Config.MissileJetPenetration,
+                JetPower = Config.MissileJetPower,
+                JetSpallCount = Config.MissileJetSpallCount,
             };
         }
 
@@ -290,6 +308,7 @@ namespace BombsAway
             {
                 Kind = "MissileHE",
                 FragPower = Config.MissileHEFragPower,
+                ChargeKgTNT = Config.MissileHEChargeKgTNT,
                 MeshName = "Javelin_mesh",
                 Sticky = false,
 
