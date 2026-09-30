@@ -35,6 +35,18 @@ namespace BombsAway
             _hooked = true;
             FruitBallistics.Exploded  += OnExploded;
             FruitBallistics.DebrisArc += OnDebris;
+
+            // Register every kind up front, so FruitLib knows charges are coming and can look
+            // up ragdolls' organs ahead of the first blast rather than during it.
+            try
+            {
+                SpecFor(ExplosionParams.FromGrenadeConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromC4Config(Vector3.zero));
+                SpecFor(ExplosionParams.FromClaymoreConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromMissileConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromMissileHEConfig(Vector3.zero));
+            }
+            catch (System.Exception e) { MelonLogger.Warning($"[Explosion] pre-registering specs failed: {e.Message}"); }
         }
 
         // ══════════════════════════════════════════════════════════════════════
@@ -74,6 +86,7 @@ namespace BombsAway
             s.FragImpulse = p.FragImpulse;
             s.FragPower   = p.FragPower;
             s.ChargeKgTNT = p.ChargeKgTNT;
+            s.BlastPushScale = Config.BlastPushScale;
             s.ArcSteps    = p.ArcSteps;
             // What the fragments are: with FragPower this sets their real speed, and how well
             // they go through walls (FruitLib 5.4).

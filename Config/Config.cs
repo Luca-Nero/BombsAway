@@ -5,14 +5,16 @@ namespace BombsAway
     internal static class Config
     {
         // ── Grenade ───────────────────────────────────────────────────────────────
+        // Blast radius / force and overpressure radius are the old model's, used only when a
+        // charge's ChargeKgTNT is 0: with a charge the blast wave sets push and injury itself.
         [FruitLib.MenuCategory("Grenade")] public static float Fuse = 2f;
         public static float FlashRate = 0.2f;
         [FruitLib.MenuCategory("Grenade")] public static float ThrowForce = 8f;
         [FruitLib.MenuCategory("Grenade")] public static float ThrowArc = -15f;
-        [FruitLib.MenuCategory("Grenade")] public static float BlastRadius = 5f;
-        [FruitLib.MenuCategory("Grenade")] public static float BlastForce = 1f;
+        public static float BlastRadius = 5f;
+        public static float BlastForce = 1f;
         public static float BlastUpward = 1f;
-        [FruitLib.MenuCategory("Grenade")] public static float OverpressureRadius = 3.5f;
+        public static float OverpressureRadius = 3.5f;
         public static float OverpressureFalloffExp = 1;
         public static int OverpressureWoundPoints = 12;
         [FruitLib.MenuCategory("Grenade")] public static int FragRayCount = 2000;
@@ -26,10 +28,10 @@ namespace BombsAway
         // ── C4 ────────────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("C4")] public static float C4ThrowForce = 8f;
         [FruitLib.MenuCategory("C4")] public static float C4ThrowArc = -15f;
-        [FruitLib.MenuCategory("C4")] public static float C4BlastRadius = 5f;
-        [FruitLib.MenuCategory("C4")] public static float C4BlastForce = 1.5f;
+        public static float C4BlastRadius = 5f;
+        public static float C4BlastForce = 1.5f;
         public static float C4BlastUpward = 1f;
-        [FruitLib.MenuCategory("C4")] public static float C4OverpressureRadius = 5f;
+        public static float C4OverpressureRadius = 5f;
         public static float C4OverpressureFalloffExp = 1;
         public static int C4OverpressureWoundPoints = 18;
         [FruitLib.MenuCategory("C4")] public static int C4FragRayCount = 2000;
@@ -44,10 +46,10 @@ namespace BombsAway
         [FruitLib.MenuCategory("Claymore")] public static float MineThrowForce = 8f;
         [FruitLib.MenuCategory("Claymore")] public static float MineThrowArc = -15f;
         [FruitLib.MenuCategory("Claymore")] public static float MineProximityRange = 10f;
-        [FruitLib.MenuCategory("Claymore")] public static float MineBlastRadius = 6f;
-        [FruitLib.MenuCategory("Claymore")] public static float MineBlastForce = 1f;
+        public static float MineBlastRadius = 6f;
+        public static float MineBlastForce = 1f;
         public static float MineBlastUpward = 0f;
-        [FruitLib.MenuCategory("Claymore")] public static float MineOverpressureRadius = 3.5f;
+        public static float MineOverpressureRadius = 3.5f;
         public static float MineOverpressureFalloffExp = 1;
         public static int MineOverpressureWoundPoints = 12;
         [FruitLib.MenuCategory("Claymore")] public static int MineFragRayCount = 1000;
@@ -59,10 +61,10 @@ namespace BombsAway
         [FruitLib.MenuCategory("Claymore")] public static float MineChargeKgTNT = 0.9f;
 
         // ── Missile warhead ───────────────────────────────────────────────────────
-        [FruitLib.MenuCategory("Missile")] public static float MissileBlastRadius = 3f;
-        [FruitLib.MenuCategory("Missile")] public static float MissileBlastForce = 1f;
+        public static float MissileBlastRadius = 3f;
+        public static float MissileBlastForce = 1f;
         public static float MissileBlastUpward = 0f;
-        [FruitLib.MenuCategory("Missile")] public static float MissileOverpressureRadius = 3f;
+        public static float MissileOverpressureRadius = 3f;
         public static float MissileOverpressureFalloffExp = 1;
         public static int MissileOverpressureWoundPoints = 12;
         [FruitLib.MenuCategory("Missile")] public static int MissileFragRayCount = 1000;
@@ -79,10 +81,10 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile")] public static int MissileJetSpallCount = 60;
 
         // ── Missile HE warhead ────────────────────────────────────────────────────
-        [FruitLib.MenuCategory("Missile HE")] public static float MissileHEBlastRadius = 6f;
-        [FruitLib.MenuCategory("Missile HE")] public static float MissileHEBlastForce = 4f;
+        public static float MissileHEBlastRadius = 6f;
+        public static float MissileHEBlastForce = 4f;
         public static float MissileHEBlastUpward = 1f;
-        [FruitLib.MenuCategory("Missile HE")] public static float MissileHEOverpressureRadius = 12f;
+        public static float MissileHEOverpressureRadius = 12f;
         public static float MissileHEOverpressureFalloffExp = 1f;
         public static int MissileHEOverpressureWoundPoints = 24;
         [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragRayCount = 2000;
@@ -92,6 +94,20 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEDamageScale = 1.25f;
         [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragPower = 3000;
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEChargeKgTNT = 3f;
+
+        // ── Detonation ────────────────────────────────────────────────────────────
+        // Shooting a live charge sets it off; an explosion sets off charges its fragments reach
+        // or its blast is strong enough at (Explosion/Explosion.Chain.cs).
+        [FruitLib.MenuCategory("Detonation")] public static bool ShootToDetonate = true;
+        [FruitLib.MenuCategory("Detonation")] public static bool ChainReactions = true;
+        // Scales how far blast waves throw things (1 = physical, from the charge's TNT figure).
+        [FruitLib.MenuCategory("Detonation")] public static float BlastPushScale = 1f;
+        public static float SympatheticKPa = 2000f;
+        public static float ChainFragmentSpeed = 150f;
+        public static float ChainDelayMin = 0.03f;
+        public static float ChainDelayMax = 0.12f;
+        public static int ChainPerFrame = 1;
+        public static float OrdnanceHitRadius = 0.12f;
 
         // ── Homing guidance ───────────────────────────────────────────────────────
         public static float MissileMinLaunchDist = 8f;

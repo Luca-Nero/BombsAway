@@ -83,6 +83,7 @@ namespace BombsAway
             ExplosionDebugDraw.Tick();
             PlacementProbe.Tick(!FruitMenu.IsInputSuppressed);
             TestBench.Tick(!FruitMenu.IsInputSuppressed);
+            TickChain();
             TickPlacement();
 
             if (!FruitMenu.IsInputSuppressed)
