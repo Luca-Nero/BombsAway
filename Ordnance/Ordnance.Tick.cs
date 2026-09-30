@@ -185,7 +185,9 @@ namespace BombsAway
             }
         }
 
-        /// <summary>The body a stuck charge rode on was destroyed: undo StickAt and let it drop.</summary>
+        /// <summary>The body a stuck charge rode on was destroyed: undo StickAt and let it drop.
+        /// A sticky charge falls the scripted way from where it hung, so it sticks again to
+        /// whatever it lands on; anything else drops as a plain physical body.</summary>
         private static void Unstick(GrenadeState g)
         {
             g.Stuck = false;
@@ -194,6 +196,20 @@ namespace BombsAway
 
             var col = g.Obj.GetComponent<Collider>();
             if (col != null) col.enabled = true;
+
+            if (g.Params.Sticky && g.Rb != null)
+            {
+                g.Rb.isKinematic = true;
+                g.Ballistic = true;
+                g.Velocity = Vector3.zero;
+                g.FlightTime = 0f;
+                g.ThrowDir = g.Obj.transform.forward;   // lands facing the way it hung
+                g.CastRadius = FlightRadius(g.Obj);
+                g.SpinRate = 0f;
+                g.HasLanding = false;
+                return;
+            }
+
             if (g.Rb != null)
             {
                 g.Rb.isKinematic = false;

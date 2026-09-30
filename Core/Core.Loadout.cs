@@ -106,13 +106,41 @@ namespace BombsAway
         /// detonation queued for them) go too, along with the materials they made.</summary>
         private static void ResetChargesForScene()
         {
-            foreach (var g in _grenades) ReleaseMaterials(g.Owned);
-            foreach (var m in _missiles) ReleaseMaterials(m.Owned);
+            ClearAllCharges();
+            TestBench.OnScene();
+            ExplosionVFX.ResetForScene();
+        }
+
+        /// <summary>
+        /// Every charge and missile in the world goes, without going off: the World menu's
+        /// RESET BOMBS, and RESET MAP / RESET ALL, which put the map back in place without a
+        /// scene load - so nothing else would clear what the map no longer has room for.
+        /// </summary>
+        internal static void ClearAllCharges()
+        {
+            foreach (var g in _grenades)
+            {
+                if (g.Obj != null) GameObject.Destroy(g.Obj);
+                ReleaseMaterials(g.Owned);
+                g.Obj = null;
+                g.Dead = true;
+            }
+            foreach (var m in _missiles)
+            {
+                if (m.Obj != null) GameObject.Destroy(m.Obj);
+                ReleaseMaterials(m.Owned);
+                m.Obj = null;
+                m.Dead = true;
+            }
             _grenades.Clear();
             _missiles.Clear();
             ClearPending();
-            TestBench.OnScene();
-            ExplosionVFX.ResetForScene();
+        }
+
+        private static void OnMapReset()
+        {
+            ClearAllCharges();
+            TestBench.OnScene();   // the bench's walls are ours, not the map's
         }
 
         /// <summary>LMB for the equipped ordnance.</summary>

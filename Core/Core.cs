@@ -64,6 +64,10 @@ namespace BombsAway
             FruitHud.Register("BombsAway", BuildHud, order: 10);
             RegisterLoadout();
 
+            // World > SCENE: a row of our own, and the map's resets clear our charges too.
+            FruitWorldMenu.AddButton("BombsAway.ResetBombs", "Reset Bombs", ClearAllCharges);
+            FruitWorldMenu.MapReset += OnMapReset;
+
             var perf = FruitPerfMon.For("BombsAway");
             perf.Counter("BA Ordnance", () => _grenades.Count);
             perf.Counter("BA Missiles", () => _missiles.Count);
