@@ -65,35 +65,48 @@ namespace BombsAway
             return arr;
         }
 
-        private Bounds GetAggregateBounds(Rigidbody rb)
+        // False when the target has no live renderer left (destroyed mid-lock).
+        private bool TryGetAggregateBounds(Rigidbody rb, out Bounds b)
         {
+            b = new Bounds(rb.transform.position, Vector3.one * 0.5f);
             var renderers = GetCachedRenderers(rb);
-            if (renderers == null || renderers.Length == 0)
-                return new Bounds(rb.transform.position, Vector3.one * 0.5f);
+            if (renderers == null || renderers.Length == 0) return true;
 
-            Bounds b = renderers[0].bounds;
-            for (int i = 1; i < renderers.Length; i++)
-                b.Encapsulate(renderers[i].bounds);
-            return b;
+            bool any = false, stale = false;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (r == null) { stale = true; continue; }  // destroyed since it was cached
+                if (!any) { b = r.bounds; any = true; }
+                else b.Encapsulate(r.bounds);
+            }
+
+            // Drop the entry so the next frame rebuilds it from what is still alive.
+            if (stale) _cachedRenderers = null;
+            return any;
         }
 
         public void Update(Rigidbody rb, bool locked)
         {
             EnsureBuilt();
-            _root.SetActive(true);
+
+            if (rb == null) { Hide(); return; }
 
             Bounds bounds;
-            try { bounds = GetAggregateBounds(rb); }
+            bool hasBounds;
+            try { hasBounds = TryGetAggregateBounds(rb, out bounds); }
             catch { Hide(); return; }
+            if (!hasBounds) { Hide(); return; }
 
-            var cam = Camera.main;
-            if (cam == null) return;
+            var cam = CameraCache.Main;
+            if (cam == null) { Hide(); return; }
 
             Vector3 min3 = bounds.min - Vector3.one * 0.05f;
             Vector3 max3 = bounds.max + Vector3.one * 0.05f;
 
             float sMinX = float.MaxValue, sMinY = float.MaxValue;
             float sMaxX = float.MinValue, sMaxY = float.MinValue;
+            bool anyInFront = false;
 
             for (int i = 0; i < 8; i++)
             {
@@ -103,11 +116,16 @@ namespace BombsAway
                     (i & 4) == 0 ? min3.z : max3.z);
                 Vector3 sp = cam.WorldToScreenPoint(wc);
                 if (sp.z < 0f) continue;  // behind camera
+                anyInFront = true;
                 if (sp.x < sMinX) sMinX = sp.x;
                 if (sp.x > sMaxX) sMaxX = sp.x;
                 if (sp.y < sMinY) sMinY = sp.y;
                 if (sp.y > sMaxY) sMaxY = sp.y;
             }
+
+            // Whole box behind the camera: the min/max are still at their sentinels.
+            if (!anyInFront) { Hide(); return; }
+            _root.SetActive(true);
 
             Vector3 c = bounds.center;
             float distToCam = Vector3.Distance(c, cam.transform.position);
@@ -172,9 +190,27 @@ namespace BombsAway
         private static void HideFocusIndicator() => _focusBracket.Hide();
         private static readonly HashSet<Rigidbody> _scanSeen = new HashSet<Rigidbody>();
 
+        // The overlap is throttled: the cone test doesn't need to run every frame.
+        private const float ScanInterval = 0.1f;
+        private static float _scanNextTime;
+        private static Rigidbody _scanResult;
+
         private static Rigidbody ScanForTarget()
         {
-            var cam = Camera.main;
+            float now = Time.unscaledTime;
+            if (now < _scanNextTime)
+            {
+                if (_scanResult == null) _scanResult = null;  // destroyed since the last scan
+                return _scanResult;
+            }
+            _scanNextTime = now + ScanInterval;
+            _scanResult = ScanForTargetNow();
+            return _scanResult;
+        }
+
+        private static Rigidbody ScanForTargetNow()
+        {
+            var cam = CameraCache.Main;
             if (cam == null) return null;
 
             Vector3 camPos = cam.transform.position;

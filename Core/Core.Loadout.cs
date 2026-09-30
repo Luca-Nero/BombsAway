@@ -97,8 +97,22 @@ namespace BombsAway
         {
             // A scene reload drops the held item without firing OnDeselected.
             Equipped = false;
+            ResetChargesForScene();
             ResetPlacementForScene();
             PlacementProbe.OnScene();
+        }
+
+        /// <summary>The scene's objects are gone, so the charges tracking them (and any chain
+        /// detonation queued for them) go too, along with the materials they made.</summary>
+        private static void ResetChargesForScene()
+        {
+            foreach (var g in _grenades) ReleaseMaterials(g.Owned);
+            foreach (var m in _missiles) ReleaseMaterials(m.Owned);
+            _grenades.Clear();
+            _missiles.Clear();
+            ClearPending();
+            TestBench.OnScene();
+            ExplosionVFX.ResetForScene();
         }
 
         /// <summary>LMB for the equipped ordnance.</summary>

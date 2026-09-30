@@ -47,6 +47,7 @@ namespace BombsAway
                 ep.ArmDelay = 0f;
 
             GameObject obj;
+            var owned = new System.Collections.Generic.List<Material>();
             var mesh = Core.Meshes.GetMesh(ep.MeshName);
             if (mesh != null)
             {
@@ -58,8 +59,8 @@ namespace BombsAway
                 mf.mesh = mesh;
 
                 var mr = obj.AddComponent<MeshRenderer>();
-                FruitMeshUtil.ApplyMaterials(mr, Core.Meshes.GetMaterials(ep.MeshName),
-                    Config.FindShader(), new Color(0.3f, 0.3f, 0.32f, 1f));
+                owned.AddRange(FruitMeshUtil.ApplyNewMaterials(mr, Core.Meshes.GetMaterials(ep.MeshName),
+                    Config.FindShader(), new Color(0.3f, 0.3f, 0.32f, 1f)));
                 mr.shadowCastingMode = ShadowCastingMode.Off;
             }
             else
@@ -72,8 +73,10 @@ namespace BombsAway
                 var rend = obj.GetComponent<Renderer>();
                 if (rend != null)
                 {
-                    rend.material = new Material(Config.FindShader());
-                    rend.material.color = new Color(0.3f, 0.3f, 0.32f, 1f);
+                    var bodyMat = new Material(Config.FindShader());
+                    bodyMat.color = new Color(0.3f, 0.3f, 0.32f, 1f);
+                    rend.material = bodyMat;
+                    owned.Add(bodyMat);
                     rend.shadowCastingMode = ShadowCastingMode.Off;
                 }
 
@@ -91,7 +94,9 @@ namespace BombsAway
             var trailShader = Config.FindSpriteShader();
             if (trailShader != null)
             {
-                trail.material = new Material(trailShader);
+                var trailMat = new Material(trailShader);
+                owned.Add(trailMat);
+                trail.material = trailMat;
                 trail.startColor = new Color(1f, 0.6f, 0.1f, 0.8f);
                 trail.endColor = new Color(0.5f, 0.5f, 0.5f, 0f);
             }
@@ -157,6 +162,7 @@ namespace BombsAway
                 Unguided = unguided,
                 LaunchY = obj.transform.position.y,
                 CruiseAlt = cruiseAlt,
+                Owned = owned,
                 Params = ep,
             });
 
@@ -168,7 +174,13 @@ namespace BombsAway
 
         private static void TickMissile(HomingMissileState m, float dt)
         {
-            if (m.Dead || m.Obj == null) return;
+            if (m.Dead) return;
+            if (m.Obj == null)   // destroyed by the game: nothing left to fly or to go off
+            {
+                m.Dead = true;
+                ReleaseMaterials(m.Owned);
+                return;
+            }
 
             m.Timer += dt;
 
@@ -397,6 +409,7 @@ namespace BombsAway
             }
             Physics.SyncTransforms();
             if (m.Obj != null) GameObject.Destroy(m.Obj);
+            ReleaseMaterials(m.Owned);
             m.Obj = null;
             m.Dead = true;
             m.Params.Origin = origin;

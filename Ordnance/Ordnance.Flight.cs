@@ -92,6 +92,7 @@ namespace BombsAway
             if (g.FlightTime > MaxScriptedFlight)
             {
                 Object.Destroy(g.Obj);
+                ReleaseMaterials(g.Owned);
                 g.Obj = null;
                 g.Dead = true;
                 return;

@@ -17,7 +17,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.3.0";
+        public const string Version = "5.4.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -34,7 +34,7 @@ namespace BombsAway
 
         // ── FruitLib dependency ──────────────────────────────────────────────
         // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
-        private const int LibMajor = 5, LibMinor = 4, LibPatch = 0;
+        private const int LibMajor = 5, LibMinor = 5, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()
@@ -55,6 +55,8 @@ namespace BombsAway
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void Init()
         {
+            // Before the ini is read, so Reset to Defaults goes back to the code's values.
+            FruitMenu.CaptureDefaults(typeof(Config));
             ConfigLoader.Load();
             Meshes = new FruitMeshLibrary(System.Reflection.Assembly.GetExecutingAssembly());
             ExplosionSystem.Init();
@@ -62,9 +64,10 @@ namespace BombsAway
             FruitHud.Register("BombsAway", BuildHud, order: 10);
             RegisterLoadout();
 
-            FruitPerfMon.RegisterCounter("BA Ordnance", () => _grenades.Count);
-            FruitPerfMon.RegisterCounter("BA Missiles", () => _missiles.Count);
-            FruitPerfMon.RegisterCounter("BA VFX", () => VfxRunner.ActiveCount);
+            var perf = FruitPerfMon.For("BombsAway");
+            perf.Counter("BA Ordnance", () => _grenades.Count);
+            perf.Counter("BA Missiles", () => _missiles.Count);
+            perf.Counter("BA VFX", () => VfxRunner.ActiveCount);
 
             FruitUpdateCheck.Register("BombsAway", Version, "Luca-Nero", "BombsAway");
 
@@ -172,7 +175,16 @@ namespace BombsAway
                 var g = _grenades[i];
                 if (g.Dead) { _grenades.RemoveAt(i); continue; }
 
-                TickGrenade(g, dt);
+                // One bad charge must not stop the rest ticking: retire it and carry on.
+                try { TickGrenade(g, dt); }
+                catch (System.Exception e)
+                {
+                    MelonLogger.Warning($"[Ordnance] {g.Params.Kind} tick failed, discarding it: {e.Message}");
+                    try { if (g.Obj != null) GameObject.Destroy(g.Obj); } catch { }
+                    ReleaseMaterials(g.Owned);
+                    g.Obj = null;
+                    g.Dead = true;
+                }
 
                 if (g.Dead) _grenades.RemoveAt(i);
             }
@@ -182,7 +194,15 @@ namespace BombsAway
             {
                 var m = _missiles[i];
                 if (m.Dead) { _missiles.RemoveAt(i); continue; }
-                TickMissile(m, dt);
+                try { TickMissile(m, dt); }
+                catch (System.Exception e)
+                {
+                    MelonLogger.Warning($"[Missile] tick failed, discarding it: {e.Message}");
+                    try { if (m.Obj != null) GameObject.Destroy(m.Obj); } catch { }
+                    ReleaseMaterials(m.Owned);
+                    m.Obj = null;
+                    m.Dead = true;
+                }
                 if (m.Dead) _missiles.RemoveAt(i);
             }
         }

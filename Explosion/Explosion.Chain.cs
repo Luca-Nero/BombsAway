@@ -34,6 +34,9 @@ namespace BombsAway
         private static readonly List<(object charge, float at)> _pending = new List<(object, float)>();
         private static bool _shootHooked, _chainHooked;
 
+        /// <summary>A scene reload drops every charge, so anything still queued to go off goes too.</summary>
+        internal static void ClearPending() => _pending.Clear();
+
         /// <summary>Hooks and unhooks FruitLib's events as the two settings change, then sets
         /// off whatever is due. Called every frame.</summary>
         private static void TickChain()
@@ -67,6 +70,7 @@ namespace BombsAway
                 _pending.RemoveAt(due);
                 try
                 {
+                    // A charge the game destroyed since it was queued is skipped; its own tick retires it.
                     if (charge is GrenadeState g && !g.Dead && g.Obj != null) { Explode(g); budget--; }
                     else if (charge is HomingMissileState m && !m.Dead && m.Obj != null) { ExplodeMissile(m); budget--; }
                 }

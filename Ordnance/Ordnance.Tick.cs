@@ -10,6 +10,14 @@ namespace BombsAway
     {
         private static void TickGrenade(GrenadeState g, float dt)
         {
+            // Destroyed by the game (a delete tool, say): nothing left to tick or to go off.
+            if (g.Obj == null)
+            {
+                g.Dead = true;
+                ReleaseMaterials(g.Owned);
+                return;
+            }
+
             var ep = g.Params;
             g.Timer += dt;
 
@@ -29,13 +37,17 @@ namespace BombsAway
                     MelonLogger.Msg($"[Ordnance] Armed ({ep.Detonation}) at {g.Timer:F2}s");
             }
 
-            if (g.Stuck && g.HostRb != null)
+            if (g.Stuck && g.HasHost)
             {
-                g.Obj.transform.position = g.HostRb.transform.TransformPoint(g.LocalOffset);
-                g.Obj.transform.rotation = g.HostRb.transform.rotation * g.LocalRotation;
+                if (g.HostRb == null) Unstick(g);   // the body it was stuck to is gone
+                else
+                {
+                    g.Obj.transform.position = g.HostRb.transform.TransformPoint(g.LocalOffset);
+                    g.Obj.transform.rotation = g.HostRb.transform.rotation * g.LocalRotation;
+                }
             }
 
-            if (g.Stuck && g.SightLines != null)
+            if (g.SightLines != null)
                 UpdateSightLines(g);
 
             // ── Detonation check (mode-specific) ─────────────────────
@@ -51,11 +63,11 @@ namespace BombsAway
                         {
                             g.FlashAccum = 0f;
                             g.FlashToggle = !g.FlashToggle;
-                            if (g.GrenadeRenderer != null && g.BaseColors != null)
+                            if (g.FlashMats != null && g.BaseColors != null)
                             {
                                 float brightness = g.FlashToggle
                                     ? 1.6f : 0.3f;
-                                var mats = g.GrenadeRenderer.materials;
+                                var mats = g.FlashMats;
                                 for (int m = 0; m < mats.Length && m < g.BaseColors.Length; m++)
                                 {
                                     if (mats[m] == null) continue;
@@ -164,6 +176,7 @@ namespace BombsAway
             if (hostRb != null)
             {
                 g.HostRb = hostRb;
+                g.HasHost = true;
                 g.LocalOffset = hostRb.transform.InverseTransformPoint(pos);
                 g.LocalRotation = Quaternion.Inverse(hostRb.transform.rotation) * rot;
 
@@ -172,21 +185,43 @@ namespace BombsAway
             }
         }
 
+        /// <summary>The body a stuck charge rode on was destroyed: undo StickAt and let it drop.</summary>
+        private static void Unstick(GrenadeState g)
+        {
+            g.Stuck = false;
+            g.HasHost = false;
+            g.HostRb = null;
+
+            var col = g.Obj.GetComponent<Collider>();
+            if (col != null) col.enabled = true;
+            if (g.Rb != null)
+            {
+                g.Rb.isKinematic = false;
+                g.Rb.linearVelocity = Vector3.zero;
+                g.Rb.angularVelocity = Vector3.zero;
+            }
+        }
+
         private static void Explode(GrenadeState g)
         {
-            Vector3 origin = g.Obj != null ? g.Obj.transform.position : Vector3.zero;
-            if (g.Obj != null)
-                g.Params.Forward = g.Obj.transform.forward;
-            if (g.Stuck && g.Obj != null)
+            // Nothing to go off if the game already destroyed it: there is no origin to blow up at.
+            if (g.Obj == null)
+            {
+                g.Dead = true;
+                ReleaseMaterials(g.Owned);
+                return;
+            }
+
+            Vector3 origin = g.Obj.transform.position;
+            g.Params.Forward = g.Obj.transform.forward;
+            if (g.Stuck)
                 origin += g.Obj.transform.up * Config.StickyExplosionLift;
 
-            if (g.Obj != null)
-            {
-                var col = g.Obj.GetComponent<Collider>();
-                if (col != null) col.enabled = false;
-            }
+            var col = g.Obj.GetComponent<Collider>();
+            if (col != null) col.enabled = false;
             Physics.SyncTransforms();
-            if (g.Obj != null) GameObject.Destroy(g.Obj);
+            GameObject.Destroy(g.Obj);
+            ReleaseMaterials(g.Owned);
             g.Obj = null;
             g.Dead = true;
             g.Params.Origin = origin;
@@ -249,6 +284,7 @@ namespace BombsAway
             var mat = new Material(Config.FindSpriteShader());
             mat.color = Color.red;
             mat.SetInt("_ZTest", 0);
+            g.Owned.Add(mat);
 
             g.SightLines = new LineRenderer[3];
 

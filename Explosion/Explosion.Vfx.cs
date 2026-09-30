@@ -144,14 +144,21 @@ namespace BombsAway
         private static readonly Dictionary<string, Texture2D> _texCache
             = new Dictionary<string, Texture2D>();
         private static bool _texScanDone = false;
+        private static float _texRescanTime;   // earliest moment a missing/destroyed texture may trigger a rescan
+        private static readonly HashSet<string> _texWarned = new HashSet<string>();
         private static void EnsureTextures()
         {
             if (_texScanDone) return;
             _texScanDone = true;
+            _texRescanTime = Time.unscaledTime + 5f;
             var all = Resources.FindObjectsOfTypeAll<Texture2D>();
             foreach (var t in all)
-                if (t != null && !string.IsNullOrEmpty(t.name) && !_texCache.ContainsKey(t.name))
+            {
+                if (t == null || string.IsNullOrEmpty(t.name)) continue;
+                // Keep a live entry; replace one that has been destroyed since it was cached.
+                if (!_texCache.TryGetValue(t.name, out var old) || old == null)
                     _texCache[t.name] = t;
+            }
             if (Config.Dbg2) MelonLogger.Msg($"[VFX] Texture scan: {_texCache.Count} cached");
         }
 
@@ -159,7 +166,14 @@ namespace BombsAway
         {
             EnsureTextures();
             _texCache.TryGetValue(name, out var t);
-            if (t == null) MelonLogger.Warning($"[VFX] Tex '{name}' NOT FOUND in cache");
+            if (t == null && Time.unscaledTime >= _texRescanTime)
+            {
+                // Missing, or destroyed with a scene: rescan, at most once per 5 s.
+                _texScanDone = false;
+                EnsureTextures();
+                _texCache.TryGetValue(name, out t);
+            }
+            if (t == null && _texWarned.Add(name)) MelonLogger.Warning($"[VFX] Tex '{name}' NOT FOUND in cache");
             return t;
         }
 
@@ -311,99 +325,188 @@ namespace BombsAway
         }
 
         // ── Ballistic debris — 3D mesh chunks with dark smoke trails ────────────────
+        // Chunks are pooled and share two materials; per-chunk grey and fade go through a
+        // property block. Pooled objects die with the scene (see ResetForScene).
+        private sealed class DebrisChunk
+        {
+            public GameObject Go;
+            public Renderer Rend;
+            public Rigidbody Body;
+            public Collider Col;
+            public TrailRenderer Trail;
+        }
+
+        private const int DebrisPoolMax = 64;
+        private static readonly Stack<DebrisChunk> _debrisPool = new Stack<DebrisChunk>();
+        private static readonly MaterialPropertyBlock _debrisMpb = new MaterialPropertyBlock();
+        private static readonly int DebrisColorId = Shader.PropertyToID("_Color");
+        private static Material _debrisMat;
+        private static Material _debrisTrailMat;
+        private static bool _debrisShaderWarned;
+
+        private static bool EnsureDebrisMats()
+        {
+            if (_debrisMat != null && _debrisTrailMat != null) return true;
+            var shader = Config.FindSpriteShader();
+            if (shader == null)
+            {
+                if (!_debrisShaderWarned)
+                {
+                    _debrisShaderWarned = true;
+                    MelonLogger.Warning("[VFX] Sprites/Default MISSING — debris chunks skipped");
+                }
+                return false;
+            }
+            if (_debrisMat == null) _debrisMat = new Material(shader);
+            if (_debrisTrailMat == null)
+            {
+                _debrisTrailMat = new Material(shader);
+                _debrisTrailMat.color = new Color(0.15f, 0.12f, 0.1f, 0.5f);
+            }
+            return true;
+        }
+
+        private static DebrisChunk RentDebris()
+        {
+            while (_debrisPool.Count > 0)
+            {
+                var pooled = _debrisPool.Pop();
+                if (pooled.Go != null) return pooled;   // else it died with a scene: discard
+            }
+
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = "VFX_FragChunk";
+            var chunk = new DebrisChunk { Go = go };
+            chunk.Rend = go.GetComponent<Renderer>();
+            chunk.Rend.sharedMaterial = _debrisMat;
+
+            // The primitive's own unit BoxCollider stays off (and the body kinematic) during flight.
+            chunk.Col = go.GetComponent<Collider>();
+            chunk.Col.enabled = false;
+            chunk.Body = go.AddComponent<Rigidbody>();
+            chunk.Body.mass = 0.05f;
+            chunk.Body.isKinematic = true;
+
+            var trailObj = new GameObject("DebrisTrail");
+            trailObj.transform.SetParent(go.transform, false);
+            var trail = trailObj.AddComponent<TrailRenderer>();
+            trail.endWidth = 0f;
+            trail.minVertexDistance = 0.05f;
+            trail.sharedMaterial = _debrisTrailMat;
+            trail.startColor = new Color(0.2f, 0.15f, 0.1f, 0.6f);
+            trail.endColor = new Color(0.3f, 0.25f, 0.2f, 0f);
+            chunk.Trail = trail;
+            return chunk;
+        }
+
+        private static void ReleaseDebris(DebrisChunk chunk)
+        {
+            if (chunk.Go == null) return;
+            if (_debrisPool.Count >= DebrisPoolMax) { GameObject.Destroy(chunk.Go); return; }
+
+            // Velocities can only be cleared while the body is still dynamic.
+            chunk.Body.linearVelocity = Vector3.zero;
+            chunk.Body.angularVelocity = Vector3.zero;
+            chunk.Body.isKinematic = true;
+            chunk.Col.enabled = false;
+            chunk.Go.layer = 0;
+            chunk.Go.SetActive(false);
+            _debrisPool.Push(chunk);
+        }
+
+        // Call on scene load: pooled chunks and cached textures may have died with the old scene.
+        internal static void ResetForScene()
+        {
+            foreach (var c in _debrisPool)
+                if (c.Go != null) GameObject.Destroy(c.Go);
+            _debrisPool.Clear();
+            _texCache.Clear();
+            _texWarned.Clear();
+            _texScanDone = false;
+            _texRescanTime = 0f;
+        }
+
         public static void SpawnDebrisArc(Vector3 p0, Vector3 vel, float gy, float flightTime)
         {
             if (!Config.VFXActive) return;
+            if (!EnsureDebrisMats()) return;
             MelonCoroutines.Start(AnimateDebrisChunk(p0, vel, gy, flightTime));
         }
 
         private static System.Collections.IEnumerator AnimateDebrisChunk(
             Vector3 p0, Vector3 vel, float gy, float flightTime)
         {
-            var chunk = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            chunk.name = "VFX_FragChunk";
-            var col = chunk.GetComponent<Collider>();
-            if (col != null) GameObject.Destroy(col); // no collider during flight
+            var chunk = RentDebris();
+            var go = chunk.Go;
+            var tf = go.transform;
 
             float baseScale = Config.DebrisMeshScale
                 * (0.6f + UnityEngine.Random.value * 0.8f);
-            chunk.transform.position = p0;
-            chunk.transform.localScale = new Vector3(
+            go.layer = 0;
+            tf.position = p0;
+            tf.rotation = Quaternion.identity;
+            tf.localScale = new Vector3(
                 baseScale * UnityEngine.Random.Range(0.5f, 1.5f),
                 baseScale * UnityEngine.Random.Range(0.5f, 1.5f),
                 baseScale * UnityEngine.Random.Range(0.7f, 2f));
 
-            // Dark material
-            var shader = Config.FindSpriteShader();
+            // Dark tint
             float grey = UnityEngine.Random.Range(0.08f, 0.2f);
-            var mat = new Material(shader);
-            mat.color = new Color(grey, grey * 0.9f, grey * 0.7f, 1f);
-            chunk.GetComponent<Renderer>().material = mat;
+            var tint = new Color(grey, grey * 0.9f, grey * 0.7f, 1f);
+            _debrisMpb.SetColor(DebrisColorId, tint);
+            chunk.Rend.SetPropertyBlock(_debrisMpb);
 
             // Dark smoke trail
-            var trailObj = new GameObject("DebrisTrail");
-            trailObj.transform.SetParent(chunk.transform, false);
-            var trail = trailObj.AddComponent<TrailRenderer>();
-            trail.time = Config.DebrisTrailTime;
-            trail.startWidth = baseScale * 2f;
-            trail.endWidth = 0f;
-            trail.minVertexDistance = 0.05f;
-            var trailMat = new Material(shader);
-            trailMat.color = new Color(0.15f, 0.12f, 0.1f, 0.5f);
-            trail.material = trailMat;
-            trail.startColor = new Color(0.2f, 0.15f, 0.1f, 0.6f);
-            trail.endColor = new Color(0.3f, 0.25f, 0.2f, 0f);
-            trail.Clear();
+            chunk.Trail.time = Config.DebrisTrailTime;
+            chunk.Trail.startWidth = baseScale * 2f;
+
+            go.SetActive(true);
+            chunk.Trail.Clear();
 
             Vector3 spinAxis = UnityEngine.Random.onUnitSphere;
             float spinRate = UnityEngine.Random.Range(200f, 600f);
 
             float elapsed = 0f;
-            while (elapsed < flightTime && chunk != null)
+            while (elapsed < flightTime && go != null)
             {
                 float dt = Time.deltaTime;
                 elapsed += dt;
 
                 Vector3 pos = p0 + vel * elapsed
                     + new Vector3(0f, 0.5f * gy * elapsed * elapsed, 0f);
-                chunk.transform.position = pos;
-                chunk.transform.Rotate(spinAxis, spinRate * dt);
+                tf.position = pos;
+                tf.Rotate(spinAxis, spinRate * dt);
                 yield return null;
             }
 
-            if (chunk == null) yield break;
+            if (go == null) yield break;
 
             Vector3 impactVel = vel + new Vector3(0f, gy * flightTime, 0f);
-            var rb = chunk.AddComponent<Rigidbody>();
-            rb.mass = 0.05f;
-            rb.linearVelocity = impactVel * 0.3f; // damped bounce
-            rb.angularVelocity = spinAxis * spinRate * Mathf.Deg2Rad * 0.2f;
-            var boxCol = chunk.AddComponent<BoxCollider>();
-            boxCol.size = Vector3.one;
+            chunk.Body.isKinematic = false;
+            chunk.Body.linearVelocity = impactVel * 0.3f; // damped bounce
+            chunk.Body.angularVelocity = spinAxis * spinRate * Mathf.Deg2Rad * 0.2f;
+            chunk.Col.enabled = true;
             // Ignore Raycast, as FruitLib's ejecta: a landed chunk must not stop the next
             // explosion's fragments (they skip layer 2), or catch rounds.
-            chunk.layer = 2;
+            go.layer = 2;
 
             float settleTime = Config.DebrisLifetime;
             float settleElapsed = 0f;
             float fadeStart = settleTime * 0.7f;
-            while (settleElapsed < settleTime && chunk != null)
+            while (settleElapsed < settleTime && go != null)
             {
                 settleElapsed += Time.deltaTime;
                 if (settleElapsed > fadeStart)
                 {
                     float fadeT = (settleElapsed - fadeStart) / (settleTime - fadeStart);
                     float a = Mathf.Lerp(1f, 0f, fadeT);
-                    var c = mat.color;
-                    c.a = a;
-                    mat.color = c;
+                    _debrisMpb.SetColor(DebrisColorId, new Color(tint.r, tint.g, tint.b, a));
+                    chunk.Rend.SetPropertyBlock(_debrisMpb);
                 }
                 yield return null;
             }
 
-            if (chunk != null) GameObject.Destroy(chunk);
-            if (mat != null) GameObject.Destroy(mat);
-            if (trailMat != null) GameObject.Destroy(trailMat);
+            ReleaseDebris(chunk);
         }
 
         private static readonly string[] DebrisTextures =

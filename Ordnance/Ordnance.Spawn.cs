@@ -1,5 +1,6 @@
 using FruitLib;
 using Il2CppInterop.Runtime;
+using System.Collections.Generic;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -15,8 +16,9 @@ namespace BombsAway
 
         public static GameObject BuildBody(string meshName, string objName, Vector3 position,
             float meshScale, PrimitiveType fallbackPrimitive, float fallbackScale,
-            Color noMaterialColor, out Renderer renderer)
+            Color noMaterialColor, out Renderer renderer, out Material[] materials)
         {
+            materials = new Material[0];
             var mesh = Core.Meshes.GetMesh(meshName);
             GameObject obj;
 
@@ -30,7 +32,7 @@ namespace BombsAway
                 mf.mesh = mesh;
 
                 var mr = obj.AddComponent<MeshRenderer>();
-                FruitMeshUtil.ApplyMaterials(mr, Core.Meshes.GetMaterials(meshName),
+                materials = FruitMeshUtil.ApplyNewMaterials(mr, Core.Meshes.GetMaterials(meshName),
                     Config.FindShader(), noMaterialColor);
                 mr.shadowCastingMode = ShadowCastingMode.Off;
                 renderer = mr;
@@ -49,8 +51,10 @@ namespace BombsAway
                 renderer = obj.GetComponent<Renderer>();
                 if (renderer != null)
                 {
-                    renderer.material = new Material(Config.FindShader());
-                    renderer.material.color = Color.grey;
+                    var mat = new Material(Config.FindShader());
+                    mat.color = Color.grey;
+                    renderer.material = mat;
+                    materials = new[] { mat };
                 }
             }
 
@@ -60,14 +64,23 @@ namespace BombsAway
 
     public partial class Core
     {
-        private static Color[] SnapshotBaseColors(Renderer rend)
+        private static Color[] SnapshotBaseColors(Material[] mats)
         {
-            if (rend == null) return null;
-            var mats = rend.materials;
+            if (mats == null) return null;
             var baseColors = new Color[mats.Length];
             for (int m = 0; m < mats.Length; m++)
                 baseColors[m] = mats[m] != null ? mats[m].color : Color.grey;
             return baseColors;
+        }
+
+        /// <summary>Materials are not destroyed with their GameObject, so whatever a charge
+        /// made for itself goes here when it does.</summary>
+        private static void ReleaseMaterials(List<Material> owned)
+        {
+            if (owned == null) return;
+            foreach (var mat in owned)
+                if (mat != null) UnityEngine.Object.Destroy(mat);
+            owned.Clear();
         }
 
         /// <summary>Body, rigidbody and state for one charge, at rest at <paramref name="position"/>.
@@ -89,7 +102,7 @@ namespace BombsAway
             }
 
             var obj = OrdnanceFactory.BuildBody(ep.MeshName, name, position, scale,
-                fallback, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend);
+                fallback, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend, out Material[] mats);
 
             var rb = obj.AddComponent(Il2CppType.Of<Rigidbody>()).TryCast<Rigidbody>();
             rb.mass = mass;
@@ -100,8 +113,10 @@ namespace BombsAway
                 GrenadeRenderer = rend,
                 Rb = rb,
                 Params = ep,
-                BaseColors = SnapshotBaseColors(rend),
+                BaseColors = SnapshotBaseColors(mats),
+                FlashMats = mats,
             };
+            g.Owned.AddRange(mats);
             if (!ep.Sticky) ConfigurePhysicalBody(g);
             return g;
         }

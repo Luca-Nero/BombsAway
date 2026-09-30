@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using Color = UnityEngine.Color;
 using Quaternion = UnityEngine.Quaternion;
@@ -37,7 +38,10 @@ namespace BombsAway
         public bool FlashToggle;
         public ExplosionParams Params;
         public Color[] BaseColors;
+        public Material[] FlashMats;          // the body's materials, for the fuse flash
+        public List<Material> Owned = new List<Material>();   // every Material made for this charge
         public bool Stuck;
+        public bool HasHost;                  // stuck to a rigidbody (HostRb goes null if that is destroyed)
         public bool Armed;
         public float ProxScanAccum;
         public bool RemoteTriggered;
@@ -72,6 +76,7 @@ namespace BombsAway
         public bool Unguided;                 
         public float LaunchY;
         public float CruiseAlt;            
+        public List<Material> Owned = new List<Material>();   // every Material made for this missile
         public ExplosionParams Params;
     }
 
