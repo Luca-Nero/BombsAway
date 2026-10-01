@@ -239,6 +239,12 @@ namespace BombsAway
             lr.SetPosition(n - 1, t.End);
         }
 
+        /// <summary>One line from anywhere in the mod (the flashbang's eye lines); drawn only while DebugDrawExplosions is on.</summary>
+        internal static void Segment(Vector3 a, Vector3 b, Color c, float width)
+        {
+            if (Config.DebugDrawExplosions) DrawSegment(a, b, c, width);
+        }
+
         private static void DrawSegment(Vector3 a, Vector3 b, Color c, float width)
         {
             var line = Begin(2, c, width);

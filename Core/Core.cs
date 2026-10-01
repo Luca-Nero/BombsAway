@@ -11,13 +11,12 @@ using Vector3 = UnityEngine.Vector3;
 [assembly: MelonInfo(typeof(BombsAway.Core), "BombsAway!", BombsAway.Core.Version, "Luca_Nero")]
 [assembly: MelonGame()]
 [assembly: MelonOptionalDependencies("FruitLib")]
-[assembly: HarmonyDontPatchAll]
 
 namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.4.0";
+        public const string Version = "5.7.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -26,6 +25,8 @@ namespace BombsAway
         // ── Lock-on state ────────────────────────────────────────────
         private static Rigidbody _focusedTarget;
         private static Rigidbody _lockedTarget;
+        private static CluView _cluView = CluView.Day;
+        private static bool _cluNfov;
         public static AttackMode MissileAttackMode = AttackMode.Top;
         public static WarheadMode MissileWarheadMode = WarheadMode.HEAT;
         public static bool PersistentLock = false;
@@ -34,7 +35,7 @@ namespace BombsAway
 
         // ── FruitLib dependency ──────────────────────────────────────────────
         // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
-        private const int LibMajor = 5, LibMinor = 5, LibPatch = 0;
+        private const int LibMajor = 5, LibMinor = 6, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()
@@ -42,7 +43,6 @@ namespace BombsAway
             _active = FruitGate.Check("BombsAway", LibMajor, LibMinor, LibPatch);
             if (!_active) return;
 
-            HarmonyInstance.PatchAll();
             Init();
         }
 
@@ -88,10 +88,13 @@ namespace BombsAway
         private void UpdateBody()
         {
             ExplosionDebugDraw.Tick();
-            PlacementProbe.Tick(!FruitMenu.IsInputSuppressed);
             TestBench.Tick(!FruitMenu.IsInputSuppressed);
+            ScaleProbe.Tick(!FruitMenu.IsInputSuppressed);
             TickChain();
             TickPlacement();
+            TickHeld();
+            Flashbang.Tick();
+            Breeze.Tick();
 
             if (!FruitMenu.IsInputSuppressed)
             {
@@ -100,17 +103,15 @@ namespace BombsAway
                 // ── Missile settings: only with the launcher in hand ─────────────
                 if (Holding(Ordnance.Missile))
                 {
-                    if (Input.GetKeyDown(Config.AttackModeKey))   // TOP -> DIRECT -> UNGUIDED -> TOP
-                    {
-                        MissileAttackMode = (AttackMode)(((int)MissileAttackMode + 1) % 3);
-                        if (Config.Dbg1) MelonLogger.Msg($"[Missile] Attack mode: {MissileAttackMode}");
-                    }
+                    // TOP <-> DIR: its key, or pressing the launcher's toolbar key again (Arma style).
+                    if (Input.GetKeyDown(Config.AttackModeKey) || MissileSlotRepressed()) { ToggleAttackMode(); Sfx.PlayHeld("CluClick"); }
 
-                    if (Input.GetKeyDown(Config.WarheadModeKey))  // HEAT <-> HE
+                    // DAY -> NIGHT -> WHOT -> BHOT on the CLU.
+                    if (Input.GetKeyDown(Config.CluViewKey))
                     {
-                        MissileWarheadMode = MissileWarheadMode == WarheadMode.HEAT
-                            ? WarheadMode.HE : WarheadMode.HEAT;
-                        if (Config.Dbg1) MelonLogger.Msg($"[Missile] Warhead: {MissileWarheadMode}");
+                        _cluView = (CluView)(((int)_cluView + 1) % 4);
+                        Sfx.PlayHeld("CluClick");
+                        if (Config.Dbg1) MelonLogger.Msg($"[CLU] View: {_cluView}");
                     }
 
                     if (Input.GetKeyDown(Config.LockModeKey))
@@ -120,13 +121,19 @@ namespace BombsAway
                             $"[Missile] Lock mode: {(PersistentLock ? "PERSISTENT" : "STANDARD")}");
                     }
 
-                    if (Input.GetKeyDown(Config.ReleaseLockKey) && _lockedTarget != null)
-                    {
-                        if (Config.Dbg1) MelonLogger.Msg("[Missile] Lock released");
-                        _lockedTarget = null;
-                        HideLockIndicator();
-                    }
+                    if (Input.GetKeyDown(Config.ReleaseLockKey) && _lockedTarget != null) BreakLock("released");
                 }
+
+                // HEAT <-> HE: the Javelin and the AT-4 share the warhead choice.
+                if ((Holding(Ordnance.Missile) || Holding(Ordnance.Rocket)) && Input.GetKeyDown(Config.WarheadModeKey))
+                {
+                    MissileWarheadMode = MissileWarheadMode == WarheadMode.HEAT
+                        ? WarheadMode.HE : WarheadMode.HEAT;
+                    if (Config.Dbg1) MelonLogger.Msg($"[Missile] Warhead: {MissileWarheadMode}");
+                }
+                // The smoke grenade's warhead key is its colour.
+                else if (Holding(Ordnance.Smoke) && Input.GetKeyDown(Config.WarheadModeKey))
+                    CycleSmokeColour();
 
                 // ── C4 remote mode: only with C4 in hand ─────────────────────────
                 if (Holding(Ordnance.C4) && Input.GetKeyDown(Config.RemoteToggleKey))
@@ -135,41 +142,48 @@ namespace BombsAway
                     MelonLogger.Msg($"[Remote] Mode: {(RemoteSequential ? "SEQUENTIAL (oldest first)" : "SIMULTANEOUS (all at once)")}");
                 }
 
-                // ── Lock-on: RMB held scans, LMB while scanning locks ────────────
-                if (SlotScanning)
-                {
-                    _focusedTarget = ScanForTarget();
-                    if (Input.GetMouseButtonDown(0) && _focusedTarget != null)
-                    {
-                        _lockedTarget = _focusedTarget;
-                        if (Config.Dbg1) MelonLogger.Msg($"[Missile] Locked: '{_lockedTarget.gameObject.name}'");
-                    }
-                }
-                else
-                {
-                    _focusedTarget = null;
-                }
+                // ── Seeker: RMB (the launcher up) tracks, locking after LockTime (Missile/Seeker.cs) ──
+                TickLockPin();
+                if (Holding(Ordnance.Missile)) TickSeeker(Time.deltaTime, SlotScanning);
+                else ClearCandidate();
 
-                if (_lockedTarget != null)
+                // The brackets belong to the launcher: with anything else in hand they are hidden,
+                // but the lock itself is kept (PersistentLock), so taking it out again shows it.
+                // With the CLU in hand its track gates do this job, so they stay hidden too.
+                if (!Holding(Ordnance.Missile) || _clu != null)
                 {
-                    try
-                    {
-                        var go = _lockedTarget.gameObject;
-                        if (go == null) { _lockedTarget = null; HideLockIndicator(); }
-                        else UpdateLockIndicator(_lockedTarget, true);
-                    }
-                    catch { _lockedTarget = null; HideLockIndicator(); }
-                }
-                else if (_focusedTarget != null) UpdateLockIndicator(_focusedTarget, false);
-                else                             HideLockIndicator();
-
-                // Secondary (focus) bracket — shown when re-locking with an existing lock
-                if (_lockedTarget != null && _focusedTarget != null && _focusedTarget != _lockedTarget)
-                    UpdateFocusIndicator(_focusedTarget);
-                else
+                    HideLockIndicator();
                     HideFocusIndicator();
+                }
+                else
+                {
+                    if (_lockedTarget != null)
+                    {
+                        try
+                        {
+                            var go = _lockedTarget.gameObject;
+                            if (go == null) { _lockedTarget = null; HideLockIndicator(); }
+                            else UpdateLockIndicator(_lockedTarget, true);
+                        }
+                        catch { _lockedTarget = null; HideLockIndicator(); }
+                    }
+                    else if (_focusedTarget != null) UpdateLockIndicator(_focusedTarget, false);
+                    else                             HideLockIndicator();
+
+                    // Secondary (focus) bracket — shown when re-locking with an existing lock
+                    if (_lockedTarget != null && _focusedTarget != null && _focusedTarget != _lockedTarget)
+                        UpdateFocusIndicator(_focusedTarget);
+                    else
+                        HideFocusIndicator();
+                }
 
                 ProcessRemoteDetonation();
+            }
+            else
+            {
+                // A menu is open, so the whole input block is skipped: hide the brackets here.
+                HideLockIndicator();
+                HideFocusIndicator();
             }
 
             // ── Main ordnance tick —─────—─────—─────—─────—─────—─────—─────—─────
@@ -213,24 +227,24 @@ namespace BombsAway
 
         private static void TryLaunchMissile()
         {
-            bool canLaunch = _lockedTarget != null || MissileAttackMode == AttackMode.Unguided;
-            if (!canLaunch) return;
+            Rigidbody launchTarget = _lockedTarget;
+            if (launchTarget == null) return;
+            // One missile per lock, unless the lock is persistent: this one's is still flying.
+            if (LockPinned && !PersistentLock) return;
 
-            Rigidbody launchTarget = MissileAttackMode == AttackMode.Unguided ? null : _lockedTarget;
-            if (launchTarget != null)
+            float dist = Vector3.Distance(
+                Camera.main.transform.position, launchTarget.transform.position);
+            if (dist < Config.MissileMinLaunchDist)
             {
-                float dist = Vector3.Distance(
-                    Camera.main.transform.position, launchTarget.transform.position);
-                if (dist < Config.MissileMinLaunchDist)
-                {
-                    if (Config.Dbg1) MelonLogger.Msg(
-                        $"[Missile] Too close ({dist:F1}m < {Config.MissileMinLaunchDist}m)");
-                    return;
-                }
+                if (Config.Dbg1) MelonLogger.Msg(
+                    $"[Missile] Too close ({dist:F1}m < {Config.MissileMinLaunchDist}m)");
+                return;
             }
 
-            SpawnMissile(launchTarget);
-            if (!PersistentLock) { _lockedTarget = null; _focusedTarget = null; }
+            // The lock stays until this missile is down (Seeker.cs TickLockPin).
+            var m = SpawnMissile(launchTarget, _lockedBody);
+            if (m != null) _lockMissile = m;
+            ClearCandidate();
             HideLockIndicator();
             HideFocusIndicator();
         }
@@ -253,8 +267,23 @@ namespace BombsAway
             }
 
             if (oldest != null) { oldest.RemoteTriggered = true; count = 1; }
+            if (fire) Sfx.PlayHeld("C4Remote");
             if (count > 0 && Config.Dbg1)
                 MelonLogger.Msg($"[Remote] {(RemoteSequential ? "Sequential" : "Simultaneous")}: {count} fired");
+        }
+
+        /// <summary>The flashbang holds stunned bodies down every physics tick too: the puppeteer writes there.</summary>
+        public override void OnFixedUpdate()
+        {
+            if (!_active) return;
+            Flashbang.Tick();
+        }
+
+        public override void OnGUI()
+        {
+            if (!_active) return;
+            Flashbang.DrawOverlay();
+            Flashbang.DrawDiagnostics();
         }
 
         public override void OnLateUpdate()
@@ -266,8 +295,13 @@ namespace BombsAway
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void LateUpdateBody()
         {
+            LateTickHeld();
+            Flashbang.Tick();
             CameraFX.Tick(Time.deltaTime);
             VfxRunner.Tick(Time.deltaTime);
+            ExplosionFx.Tick();
+            SmokeCloud.TickAll();   // after the particle systems have run: the cloud writes its puffs over them
+            Sfx.Tick();
         }
     }
 }

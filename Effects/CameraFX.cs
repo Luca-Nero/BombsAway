@@ -34,6 +34,15 @@ namespace BombsAway
             if (Config.Dbg2) MelonLogger.Msg($"[CAM] dist={dist:F2} falloff={falloff:F3} trauma={trauma:F3}");
 
             if (trauma < 0.01f) { if (Config.Dbg2) MelonLogger.Msg("[CAM] trauma < threshold, skip"); return; }
+            AddKick(trauma);
+        }
+
+        /// <summary>A shake of a given size, not from a blast's distance (the AT-4 going off on the shoulder).</summary>
+        public static void AddKick(float trauma)
+        {
+            if (!Config.CamFXActive || trauma < 0.01f) return;
+            var cam = Camera.main;
+            if (cam == null) return;
 
             if (_trauma <= 0f)
             {

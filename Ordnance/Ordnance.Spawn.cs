@@ -96,37 +96,72 @@ namespace BombsAway
                 case Ordnance.Claymore:
                     ep = ExplosionParams.FromClaymoreConfig(Vector3.zero);
                     name = "Claymore"; scale = 0.15f; mass = 0.75f; fallback = PrimitiveType.Cube; break;
+                case Ordnance.Smoke:
+                    ep = ExplosionParams.FromSmokeConfig(Vector3.zero);
+                    name = "SmokeGrenade"; scale = 0.1f; mass = 0.55f; fallback = PrimitiveType.Cylinder; break;
+                case Ordnance.Flash:
+                    ep = ExplosionParams.FromFlashConfig(Vector3.zero);
+                    name = "Flashbang"; scale = 0.1f; mass = 0.4f; fallback = PrimitiveType.Cylinder; break;
                 default:
                     ep = ExplosionParams.FromGrenadeConfig(Vector3.zero);
                     name = "Grenade"; scale = 0.1f; mass = 0.5f; fallback = PrimitiveType.Sphere; break;
             }
 
-            var obj = OrdnanceFactory.BuildBody(ep.MeshName, name, position, scale,
-                fallback, 0.2f, OrdnanceFactory.ArmyGreen, out Renderer rend, out Material[] mats);
+            var obj = OrdnanceModels.Spawn(o, position, out Renderer rend, out Material[] mats);
+            if (obj != null)
+            {
+                obj.name = name;
+                // Thrown or placed, a live grenade is the body alone: the pin and spoon stayed
+                // with the hand (Ordnance.Held.cs lets them fall).
+                OrdnanceModels.StripLooseParts(obj);
+            }
+            else obj = OrdnanceFactory.BuildBody(ep.MeshName, name, position, scale,
+                fallback, 0.2f, OrdnanceFactory.ArmyGreen, out rend, out mats);
 
-            var rb = obj.AddComponent(Il2CppType.Of<Rigidbody>()).TryCast<Rigidbody>();
+            if (o == Ordnance.Smoke) TintBand(obj.transform, SmokeColour);
+
+            // A live C4 left the hand armed: cover open, antenna out, screen on, LED blinking.
+            var rig = C4Rig.Bind(obj.transform);
+            rig?.Armed();
+            // A live claymore left the hand deployed: legs out, head up, lenses lit.
+            var clay = ClaymoreRig.Bind(obj.transform);
+            clay?.Deployed();
+
+            // Bundled prefabs bring their own Rigidbody.
+            var rb = obj.GetComponent<Rigidbody>()
+                  ?? obj.AddComponent(Il2CppType.Of<Rigidbody>()).TryCast<Rigidbody>();
             rb.mass = mass;
 
             var g = new GrenadeState
             {
+                SmokeColor = o == Ordnance.Smoke ? SmokeColour : Color.white,
                 Obj = obj,
                 GrenadeRenderer = rend,
                 Rb = rb,
                 Params = ep,
                 BaseColors = SnapshotBaseColors(mats),
                 FlashMats = mats,
+                Blink = rig?.Led,
+                Clay = clay,
             };
             g.Owned.AddRange(mats);
             if (!ep.Sticky) ConfigurePhysicalBody(g);
             return g;
         }
 
-        private static void ThrowOrdnance(Ordnance o)
+        private static void ThrowOrdnance(Ordnance o) => ThrowOrdnance(o, null, null);
+
+        /// <summary>
+        /// Throws a new charge along the view. <paramref name="from"/>/<paramref name="rotation"/>
+        /// start it where the held model was (default: 1 m ahead of the camera, unrotated).
+        /// </summary>
+        private static GrenadeState ThrowOrdnance(Ordnance o, Vector3? from, Quaternion? rotation)
         {
             var cam = Camera.main;
-            if (cam == null) return;
+            if (cam == null) return null;
 
-            var g = CreateOrdnance(o, cam.transform.position + cam.transform.forward * 1f);
+            var g = CreateOrdnance(o, from ?? cam.transform.position + cam.transform.forward * 1f);
+            if (rotation.HasValue) g.Obj.transform.rotation = rotation.Value;
 
             float force, arc;
             switch (o)
@@ -156,6 +191,7 @@ namespace BombsAway
 
             _grenades.Add(g);
             _lastThrowTime = Time.time;
+            return g;
         }
     }
 }

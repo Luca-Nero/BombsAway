@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>disable</Nullable>
+    <!-- Effects/ParticleIO.cs calls il2cpp_runtime_invoke directly. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- MSB3277 = assembly version unification conflicts, thousands of them, from
          referencing MelonLoader's net6 assemblies out of a netstandard2.1 project.
@@ -32,6 +34,16 @@
     <EmbeddedResource Include="Meshes\Claymore_mesh.json" />
     <EmbeddedResource Include="Meshes\Javelin_mesh.json" />
     <EmbeddedResource Include="Meshes\TAG19_mesh.json" />
+    <!-- Built in E:\Dev\Unity\BombsAwayBundle (FruitLib > Build Bundles, copy BundlesOut\bombsaway here). -->
+    <EmbeddedResource Include="Bundles\bombsaway.bundle" />
+    <EmbeddedResource Include="Icons\Grenade.png" />
+    <EmbeddedResource Include="Icons\C4.png" />
+    <EmbeddedResource Include="Icons\Claymore.png" />
+    <EmbeddedResource Include="Icons\Javelin.png" />
+    <EmbeddedResource Include="Icons\AT4.png" />
+    <EmbeddedResource Include="Icons\Category.png" />
+    <EmbeddedResource Include="Icons\Flash.png" />
+    <EmbeddedResource Include="Icons\Smoke.png" />
   </ItemGroup>
 
   <!-- Deploy to every live FRUKT install under FruktBuildsRoot (any FRUKT.exe, at any depth, with

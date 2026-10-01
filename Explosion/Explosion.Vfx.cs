@@ -1,3 +1,4 @@
+using Il2CppInterop.Runtime;
 using MelonLoader;
 using System.Collections.Generic;
 using UnityEngine;
@@ -9,7 +10,7 @@ namespace BombsAway
 {
     internal static class VfxRunner
     {
-        internal enum Kind { Fireball, Smoke, Debris, Fade }
+        internal enum Kind { Fireball, Smoke, Debris, Fade, Plume }
 
         internal class Item
         {
@@ -25,6 +26,8 @@ namespace BombsAway
             public float SpinRate;
             public Vector3 Velocity;
             public float Gravity;
+            public float Drag;         // Plume: velocity lost per second, exponential
+            public float Grow;         // Plume: how many times its size it swells by
         }
 
         private static readonly List<Item> _items = new List<Item>();
@@ -58,6 +61,7 @@ namespace BombsAway
                     Kind.Smoke => TickSmoke(it, dt),
                     Kind.Debris => TickDebris(it, dt),
                     Kind.Fade => TickFade(it, dt),
+                    Kind.Plume => TickPlume(it, dt),
                     _ => false,
                 };
 
@@ -116,6 +120,24 @@ namespace BombsAway
             float a = Mathf.Lerp(it.BaseColor.a, 0f, it.Elapsed / it.Duration);
             if (a < 0.02f) return false;
             ApplyColor(it.Rend, WithAlpha(it.BaseColor, a));
+            return true;
+        }
+
+        /// <summary>
+        /// Thrown out fast and stopped by the air: velocity decays, the puff swells quickly and
+        /// then slowly, rises a little, and thins out.
+        /// </summary>
+        private static bool TickPlume(Item it, float dt)
+        {
+            it.Elapsed += dt;
+            float t = it.Elapsed / it.Duration;
+            if (t >= 1f) return false;
+            it.Velocity *= Mathf.Exp(-it.Drag * dt);
+            it.Go.transform.position += (it.Velocity + Vector3.up * it.RiseSpeed) * dt;
+            it.Go.transform.localScale = Vector3.one * it.BaseScale * (1f + it.Grow * (1f - Mathf.Exp(-4f * t)));
+            float a = it.BaseColor.a * (t < 0.06f ? t / 0.06f : Mathf.Pow(1f - (t - 0.06f) / 0.94f, 1.4f));
+            ApplyColor(it.Rend, WithAlpha(it.BaseColor, a));
+            ExplosionVFX.BillboardToCamera(it.Go);
             return true;
         }
 
@@ -545,6 +567,99 @@ namespace BombsAway
                 AddQuadItem(VfxRunner.Kind.Debris, "VFX_Debris", origin + dir * 0.3f,
                     Quaternion.identity, scale, mat, col, dur, 0f, 0f, 0f, dir * spd, ga);
             }
+        }
+
+        // ── AT-4 backblast ────────────────────────────────────────────────────────
+        // Out of the venturi, away from the muzzle: a jet of flame tongues, a cloud of smoke
+        // and dust thrown back in a cone, and some of it spilling round the shooter into view
+        // (the rest is behind the eye). At the front a small flash and the puff the rocket
+        // leaves. The venturi lights the surroundings for a moment.
+
+        public static void SpawnBackblast(Vector3 breech, Vector3 back, Vector3 muzzle)
+        {
+            if (!Config.VFXActive) return;
+            var flameA = GetCachedMat("MuzzleFlash1");
+            var flameB = GetCachedMat("MuzzleFlash3");
+            var smoke = GetCachedMat("WFX_T_SmokeLoopAlpha");
+            Vector3 side = Vector3.Cross(back, Vector3.up);
+            if (side.sqrMagnitude < 1e-4f) side = Vector3.right;
+            side.Normalize();
+
+            if (flameA != null && flameB != null)
+                for (int i = 0; i < 6; i++)
+                    AddPlume("VFX_Backblast_Jet", breech + back * 0.1f, Cone(back, 8f) * Rand(16f, 32f),
+                             i % 2 == 0 ? flameA : flameB, Config.VFX(Rand(0.35f, 0.6f)), new Color(1f, 0.62f, 0.22f, 0.95f),
+                             Rand(0.1f, 0.18f), drag: 14f, grow: 2.5f, rise: 0f, delay: i * 0.01f);
+
+            if (smoke != null)
+            {
+                int n = Mathf.Max(1, Config.VFXInt(14));
+                for (int i = 0; i < n; i++)
+                {
+                    float g = Rand(0.55f, 0.72f);
+                    AddPlume("VFX_Backblast_Cloud", breech + back * 0.2f, Cone(back, 35f) * Rand(6f, 22f),
+                             smoke, Config.VFX(Rand(0.5f, 0.9f)), new Color(g, g * 0.98f, g * 0.94f, 0.8f),
+                             Config.VFX(Rand(1.4f, 2.4f)), drag: 3.5f, grow: 3.5f, rise: 0.35f, delay: Rand(0f, 0.05f));
+                }
+                int spill = Mathf.Max(1, Config.VFXInt(6));
+                for (int i = 0; i < spill; i++)
+                {
+                    float s = i % 2 == 0 ? 1f : -1f;
+                    Vector3 dir = (side * s + back * Rand(-0.1f, 0.4f) - back * Rand(0f, 0.5f) + Vector3.up * Rand(0f, 0.3f)).normalized;
+                    float g = Rand(0.6f, 0.75f);
+                    AddPlume("VFX_Backblast_Spill", breech + side * s * 0.3f, dir * Rand(3f, 6.5f),
+                             smoke, Config.VFX(Rand(0.4f, 0.7f)), new Color(g, g, g, 0.55f),
+                             Config.VFX(Rand(1.2f, 2f)), drag: 2.5f, grow: 3f, rise: 0.25f, delay: Rand(0.02f, 0.08f));
+                }
+                Vector3 fwd = -back;
+                for (int i = 0; i < 3; i++)
+                    AddPlume("VFX_Muzzle_Puff", muzzle + fwd * 0.1f, Cone(fwd, 20f) * Rand(1.5f, 4f),
+                             smoke, Config.VFX(Rand(0.22f, 0.38f)), new Color(0.72f, 0.72f, 0.72f, 0.6f),
+                             Config.VFX(Rand(0.8f, 1.4f)), drag: 3f, grow: 2.5f, rise: 0.2f, delay: 0.02f);
+            }
+            if (flameA != null)
+                AddPlume("VFX_Muzzle_Flash", muzzle + (-back) * 0.08f, -back * 3f, flameA, Config.VFX(0.3f),
+                         new Color(1f, 0.7f, 0.3f, 0.9f), 0.06f, drag: 10f, grow: 1.5f, rise: 0f, delay: 0f);
+
+            MelonCoroutines.Start(Flash(breech + back * 0.5f, 0.09f));
+        }
+
+        private static float Rand(float a, float b) => a + (float)SharedRng.Instance.NextDouble() * (b - a);
+
+        /// <summary>A direction within <paramref name="deg"/> of <paramref name="axis"/>.</summary>
+        private static Vector3 Cone(Vector3 axis, float deg) =>
+            Quaternion.AngleAxis(Rand(-deg, deg), Vector3.Cross(axis, Vector3.up).sqrMagnitude > 1e-4f ? Vector3.Cross(axis, Vector3.up) : Vector3.right)
+            * Quaternion.AngleAxis(Rand(-deg, deg), Vector3.up) * axis;
+
+        private static void AddPlume(string name, Vector3 pos, Vector3 velocity, Material mat, float scale, Color color,
+                                     float duration, float drag, float grow, float rise, float delay)
+        {
+            var go = MakeQuad(name, pos, Quaternion.identity, scale, mat);
+            VfxRunner.Add(new VfxRunner.Item
+            {
+                Kind = VfxRunner.Kind.Plume, Go = go, Rend = go.GetComponent<Renderer>(), BaseColor = color,
+                Duration = duration, Delay = delay, BaseScale = scale, RiseSpeed = rise,
+                Velocity = velocity, Drag = drag, Grow = grow,
+            });
+        }
+
+        /// <summary>The venturi's light on everything round it, gone in a blink.</summary>
+        private static System.Collections.IEnumerator Flash(Vector3 at, float time)
+        {
+            var go = new GameObject("VFX_Backblast_Light");
+            go.transform.position = at;
+            var light = go.AddComponent(Il2CppType.Of<Light>()).TryCast<Light>();
+            light.type = LightType.Point;
+            light.range = 9f;
+            light.color = new Color(1f, 0.62f, 0.28f);
+            float peak = Config.VFX(7f);
+            for (float t = 0f; t < time && light != null; t += Time.deltaTime)
+            {
+                float k = 1f - t / time;
+                light.intensity = peak * k * k;
+                yield return null;
+            }
+            if (go != null) GameObject.Destroy(go);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────

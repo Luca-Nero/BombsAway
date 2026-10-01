@@ -34,25 +34,48 @@ namespace BombsAway
             return dragForce / Mathf.Max(Config.MissileMass, 0.1f);
         }
 
-        private static void SpawnMissile(Rigidbody target)
+        /// <summary>
+        /// A Javelin at <paramref name="target"/> (guided, TOP or DIR), or with
+        /// <paramref name="rocket"/> an AT-4 rocket: no seeker, no motor after the tube, straight
+        /// out where the launcher points and falling from there.
+        /// </summary>
+        private static HomingMissileState SpawnMissile(Rigidbody target, TargetBody body = null, bool rocket = false)
         {
             var cam = Camera.main;
-            if (cam == null) return;
+            if (cam == null) return null;
+            var kind = rocket ? Ordnance.Rocket : Ordnance.Missile;
 
             var ep = MissileWarheadMode == WarheadMode.HE
                 ? ExplosionParams.FromMissileHEConfig(Vector3.zero)
                 : ExplosionParams.FromMissileConfig(Vector3.zero);
 
-            if (MissileAttackMode == AttackMode.Unguided)
-                ep.ArmDelay = 0f;
+            if (rocket)   // armed a few metres out, as it leaves at full speed
+                ep.ArmDelay = Config.RocketArmDistance / Mathf.Max(1f, Config.RocketSpeed);
 
-            GameObject obj;
+            // Out of the held launcher's tube if there is one, else ahead of the camera.
+            bool fromTube = HeldTube(kind, out Vector3 spawnAt, out Vector3 tubeDir);
+            if (!fromTube) spawnAt = cam.transform.position + cam.transform.forward * 1.5f;
+            HeldFired(rocket);
+
             var owned = new System.Collections.Generic.List<Material>();
-            var mesh = Core.Meshes.GetMesh(ep.MeshName);
-            if (mesh != null)
+            // The bundled model: its own material copies, and for the Javelin a rig for fins and nozzle glow.
+            GameObject obj = OrdnanceModels.Spawn(kind, spawnAt,
+                out _, out Material[] bundleMats);
+            MissileRig rig = null;
+            RocketRig rocketRig = null;
+            var mesh = obj == null ? Core.Meshes.GetMesh(ep.MeshName) : null;
+            if (obj != null)
+            {
+                obj.name = rocket ? "Rocket" : "HomingMissile";
+                owned.AddRange(bundleMats);
+                if (rocket) rocketRig = RocketRig.Bind(obj.transform);
+                else        rig = MissileRig.Bind(obj.transform);
+                OrdnanceModels.PaintWarhead(kind, obj, MissileWarheadMode == WarheadMode.HE);   // its stencil says what it carries
+            }
+            else if (mesh != null)
             {
                 obj = new GameObject("HomingMissile");
-                obj.transform.position = cam.transform.position + cam.transform.forward * 1.5f;
+                obj.transform.position = spawnAt;
                 obj.transform.localScale = Vector3.one * 0.1f;
 
                 var mf = obj.AddComponent<MeshFilter>();
@@ -67,7 +90,7 @@ namespace BombsAway
             {
                 obj = GameObject.CreatePrimitive(PrimitiveType.Capsule);
                 obj.name = "HomingMissile";
-                obj.transform.position = cam.transform.position + cam.transform.forward * 1.5f;
+                obj.transform.position = spawnAt;
                 obj.transform.localScale = new Vector3(0.08f, 0.2f, 0.08f);
 
                 var rend = obj.GetComponent<Renderer>();
@@ -86,10 +109,14 @@ namespace BombsAway
 
             var trailAnchor = new GameObject("TrailAnchor");
             trailAnchor.transform.SetParent(obj.transform, false);
-            trailAnchor.transform.localPosition = new Vector3(0f, 0f, Config.MissileTrailOffsetZ);
+            Transform nozzle = rig != null ? rig.Nozzle : rocketRig?.Nozzle;
+            trailAnchor.transform.localPosition = nozzle != null
+                ? nozzle.localPosition
+                : new Vector3(0f, 0f, Config.MissileTrailOffsetZ);
             var trail = trailAnchor.AddComponent<TrailRenderer>();
-            trail.time = 1.5f;
-            trail.startWidth = 0.12f;
+            // The AT-4's motor is spent in the tube: only its tracer streaks after it.
+            trail.time = rocket ? 0.35f : 1.5f;
+            trail.startWidth = rocket ? 0.05f : 0.12f;
             trail.endWidth = 0.01f;
             var trailShader = Config.FindSpriteShader();
             if (trailShader != null)
@@ -97,34 +124,59 @@ namespace BombsAway
                 var trailMat = new Material(trailShader);
                 owned.Add(trailMat);
                 trail.material = trailMat;
-                trail.startColor = new Color(1f, 0.6f, 0.1f, 0.8f);
+                trail.startColor = rocket ? new Color(1f, 0.45f, 0.15f, 0.9f) : new Color(1f, 0.6f, 0.1f, 0.8f);
                 trail.endColor = new Color(0.5f, 0.5f, 0.5f, 0f);
             }
             trail.minVertexDistance = 0.1f;
             trail.Clear();
 
-            bool unguided = MissileAttackMode == AttackMode.Unguided;
-            bool topAttack = MissileAttackMode == AttackMode.Top;
+            bool unguided = rocket;
+            bool topAttack = !rocket && MissileAttackMode == AttackMode.Top;
 
             Vector3 initVelocity;
             int initPhase;
+            bool beam = false;
             if (unguided)
             {
-                initVelocity = cam.transform.forward * Config.MissileSpeed;
+                // The whole burn happens in the tube: it leaves at full speed. With a convergence
+                // range it heads from the muzzle for the centre line that far out and then rides
+                // that line, so it goes where the crosshair (or the sight) was, whatever the tube's
+                // offset from the eye. Without one it flies along the tube and drops.
+                beam = Config.RocketConvergence > 0f;
+                Vector3 dir = beam
+                    ? (cam.transform.position + cam.transform.forward * Config.RocketConvergence - spawnAt).normalized
+                    : fromTube ? tubeDir : cam.transform.forward;
+                initVelocity = dir * Config.RocketSpeed;
                 initPhase = 1;
             }
             else
             {
-                float launchRad = Config.MissileLaunchAngle * Mathf.Deg2Rad;
-                Vector3 flatFwd = cam.transform.forward;
-                flatFwd.y = 0f;
-                if (flatFwd.sqrMagnitude < 0.001f) flatFwd = Vector3.forward;
-                flatFwd.Normalize();
-                Vector3 launchDir = (flatFwd * Mathf.Cos(launchRad)
-                                   + Vector3.up * Mathf.Sin(launchRad)).normalized;
+                // Out of a held launcher: along its tube, which points up from the sight line.
+                // Otherwise the old way: level with the view, MissileLaunchAngle up.
+                Vector3 launchDir;
+                if (fromTube) launchDir = tubeDir;
+                else
+                {
+                    float launchRad = Config.MissileLaunchAngle * Mathf.Deg2Rad;
+                    Vector3 flatFwd = cam.transform.forward;
+                    flatFwd.y = 0f;
+                    if (flatFwd.sqrMagnitude < 0.001f) flatFwd = Vector3.forward;
+                    flatFwd.Normalize();
+                    launchDir = (flatFwd * Mathf.Cos(launchRad) + Vector3.up * Mathf.Sin(launchRad)).normalized;
+                }
                 initVelocity = launchDir * Config.MissileSoftLaunchSpeed;
                 initPhase = 0;
             }
+
+            if (rig != null)
+            {
+                // Out of the tube folded and cold: the motor (glow, exhaust trail) lights at ignition.
+                rig.Folded();
+                if (rig.Glow != null) rig.Glow.enabled = initPhase != 0;
+                trail.emitting = initPhase != 0;
+            }
+            rocketRig?.Folded();   // the tracer lights with the motor, in the tube: on from the start
+            obj.transform.rotation = Quaternion.LookRotation(initVelocity);
 
             Renderer targetRend = null;
             if (target != null)
@@ -148,11 +200,15 @@ namespace BombsAway
 
             Vector3 initialLOS = (tgtPos - obj.transform.position).normalized;
 
-            _missiles.Add(new HomingMissileState
+            var state = new HomingMissileState
             {
+                Beam = beam,
+                BeamOrigin = cam.transform.position,
+                BeamDir = cam.transform.forward,
                 Obj = obj,
                 TargetRb = beamRb,
                 TargetRenderer = targetRend,
+                Body = body,
                 LastKnownTargetPos = tgtPos,
                 PrevLOSDir = initialLOS,
                 Velocity = initVelocity,
@@ -164,12 +220,17 @@ namespace BombsAway
                 CruiseAlt = cruiseAlt,
                 Owned = owned,
                 Params = ep,
-            });
+                Rig = rig,
+                RocketRig = rocketRig,
+                Trail = rig != null ? trail : null,
+            };
+            _missiles.Add(state);
 
             if (Config.Dbg1) MelonLogger.Msg(
-                $"[Missile] Launched ({(unguided ? "UNGUIDED" : topAttack ? "TOP" : "DIR")}) " +
+                $"[Missile] Launched ({(unguided ? "AT-4" : topAttack ? "TOP" : "DIR")}) " +
                 $"alt={cruiseAlt:F0}m" +
                 $"{(target != null ? $" at '{target.gameObject.name}'" : " (ballistic)")}");
+            return state;
         }
 
         private static void TickMissile(HomingMissileState m, float dt)
@@ -183,8 +244,11 @@ namespace BombsAway
             }
 
             m.Timer += dt;
+            TickMissileRig(m);
 
-            if (m.TargetRb != null)
+            if (m.Body != null && m.Body.Alive)
+                m.LastKnownTargetPos = m.Body.Centre;   // whole body: its middle (top attack: its top, below)
+            else if (m.TargetRb != null)
             {
                 try { m.LastKnownTargetPos = m.TargetRb.transform.position; }
                 catch { m.TargetRb = null; }
@@ -205,7 +269,28 @@ namespace BombsAway
                     m.Phase = 1;
                     m.MotorTime = 0f;
                     if (Config.Dbg1) MelonLogger.Msg("[Missile] Flight motor ignition");
+                    Sfx.Play("MissileIgnite", m.Obj.transform.position, m.Obj.transform);
+                    m.Motor = Sfx.Play("MissileMotorLoop", m.Obj.transform.position, m.Obj.transform);
                 }
+                return;
+            }
+
+            // The AT-4's rocket burns out in the tube. Converging: straight for the centre line,
+            // then along it. Otherwise it only falls.
+            if (m.Unguided)
+            {
+                if (m.Beam)
+                {
+                    float along = Vector3.Dot(pos - m.BeamOrigin, m.BeamDir);
+                    if (!m.OnBeam && along >= Config.RocketConvergence)
+                    {
+                        m.OnBeam = true;
+                        m.Obj.transform.position = pos = m.BeamOrigin + m.BeamDir * along;
+                        m.Velocity = m.BeamDir * m.Velocity.magnitude;
+                    }
+                }
+                else m.Velocity += Vector3.down * Config.RocketGravity * dt;
+                FinishMissileFrame(m, dt, pos);
                 return;
             }
 
@@ -221,13 +306,6 @@ namespace BombsAway
             float dragDecel = MissileDragDecel(speed);
             float netAccel = thrustAccel - dragDecel;
             speed = Mathf.Max(speed + netAccel * dt, 1f);   // floor at 1 m/s
-
-            if (m.Unguided)
-            {
-                m.Velocity = m.Velocity.normalized * speed;
-                FinishMissileFrame(m, dt, pos);
-                return;
-            }
 
             if (m.Phase == 1)
             {
@@ -307,7 +385,8 @@ namespace BombsAway
 
                 if (m.TopAttack)
                 {
-                    if (m.TargetRenderer != null)
+                    if (m.Body != null && m.Body.Alive) aimPoint.y = m.Body.Top;
+                    else if (m.TargetRenderer != null)
                     {
                         try { aimPoint.y = m.TargetRenderer.bounds.max.y; }
                         catch { m.TargetRenderer = null; }
@@ -348,6 +427,24 @@ namespace BombsAway
             }
 
             FinishMissileFrame(m, dt, pos);
+        }
+
+        /// <summary>Fins spring out during the coast; the nozzle glows and trails while the motor burns.</summary>
+        private static void TickMissileRig(HomingMissileState m)
+        {
+            if (m.RocketRig != null)
+            {
+                if (m.Timer <= RocketRig.DeployDone + 0.05f) m.RocketRig.DeployAt(m.Timer);
+                return;
+            }
+            if (m.Rig == null) return;
+            if (m.Timer <= MissileRig.DeployDone + 0.05f) m.Rig.DeployAt(m.Timer);
+
+            bool burning = m.Phase >= 1 && m.MotorTime < Config.MissileFlightMotorTime;
+            if (!burning && m.Motor != null) { GameObject.Destroy(m.Motor.gameObject); m.Motor = null; }   // burnt out
+            if (m.Rig.Glow != null)   // sputters for a couple of frames as it lights
+                m.Rig.Glow.enabled = burning && (m.MotorTime > 0.06f || ((int)(m.MotorTime / 0.017f) & 1) == 0);
+            if (m.Trail != null && m.Trail.emitting != burning) m.Trail.emitting = burning;
         }
 
         private static void FinishMissileFrame(HomingMissileState m, float dt, Vector3 preMovePos)

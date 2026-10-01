@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using FruitLib;
 using Il2CppCore.MeshData;
 using Il2CppGame;
@@ -45,6 +46,7 @@ namespace BombsAway
 
         private static IObjectSpawnHologramService _holoSvc;
         private static Material _holoMaterial;
+        private static Material _holoTemplateMaterial;
         private static readonly GameObject[] _holoTemplates = new GameObject[3];
         private static bool _holoRunning, _holoVisible;
         private static Ordnance _holoFor;
@@ -58,11 +60,11 @@ namespace BombsAway
         private static float _lastThrowTime = -99f;
 
         /// <summary>Yaw about the surface normal, per ordnance, kept between placements.</summary>
-        private static readonly float[] _placeYaw = new float[3];
+        private static readonly float[] _placeYaw = new float[System.Enum.GetValues(typeof(Ordnance)).Length];
         /// <summary>This placement's random yaw, rolled after each one so the hologram shows it.</summary>
         private static float _placeJitter;
 
-        private static bool Placeable(Ordnance o) => o != Ordnance.Missile;
+        private static bool Placeable(Ordnance o) => !IsLauncher(o);
 
         /// <summary>Every frame, before TickLoadout, so a click uses this frame's target.</summary>
         private static void TickPlacement()
@@ -150,7 +152,7 @@ namespace BombsAway
             {
                 Ordnance.C4       => StickOffset(DetonationMode.Remote),
                 Ordnance.Claymore => StickOffset(DetonationMode.Proximity),
-                _                 => new Vector3(0f, GrenadeRestHeight(), 0f),
+                _                 => new Vector3(0f, GrenadeRestHeight(o), 0f),
             };
             pos = hit.point + rot * local;
         }
@@ -158,8 +160,11 @@ namespace BombsAway
         private static float PlaceYaw(Ordnance o) => _placeYaw[(int)o] + _placeJitter;
 
         /// <summary>Half the grenade's height, plus a hair so it does not start interpenetrating.</summary>
-        private static float GrenadeRestHeight()
+        private static float GrenadeRestHeight(Ordnance o)
         {
+            var prefab = OrdnanceModels.Prefab(o);
+            if (prefab != null) return -OrdnanceModels.LocalBounds(prefab, skipLooseParts: true).min.y + 0.01f;
+
             OrdnanceVisual(Ordnance.Grenade, out string meshName, out float scale);
             var mesh = Meshes?.GetMesh(meshName);
             float half = mesh != null ? mesh.bounds.extents.y * scale : 0.1f;
@@ -179,10 +184,10 @@ namespace BombsAway
 
         // ── Placing ─────────────────────────────────────────────────────────────
 
-        private static void PlaceOrdnance(Ordnance o, RaycastHit hit)
+        private static GrenadeState PlaceOrdnance(Ordnance o, RaycastHit hit)
         {
             var cam = Camera.main;
-            if (cam == null) return;
+            if (cam == null) return null;
 
             Vector3 aim = cam.transform.forward;
             PlacePose(o, hit, aim, out Vector3 pos, out Quaternion rot);
@@ -213,6 +218,7 @@ namespace BombsAway
 
             if (Config.Dbg1)
                 MelonLogger.Msg($"[Place] {o} on '{hit.collider.name}' at {pos} d={hit.distance:F2}");
+            return g;
         }
 
         // ── Hologram session ────────────────────────────────────────────────────
@@ -394,36 +400,65 @@ namespace BombsAway
         /// </summary>
         internal static MeshDataHandler BuildHologramTemplate(Ordnance o)
         {
-            OrdnanceVisual(o, out string meshName, out float scale);
-            var mesh = HologramMesh(Meshes?.GetMesh(meshName));
-            if (mesh == null) return null;
+            // Bundled model: one visual per part, at its offset in the prefab (no Rigidbody or
+            // collider comes along). Otherwise the JSON mesh, scaled as CreateOrdnance scales it.
+            var parts = new List<(string name, Mesh mesh, Vector3 offset, float scale)>();
+            Bounds bounds;
+            var prefab = OrdnanceModels.Prefab(o);
+            if (prefab != null)
+            {
+                // What gets set down: the body, without the pin and spoon the hand lets go of.
+                foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>(true))
+                    if (mf.sharedMesh != null && !OrdnanceModels.IsLoosePart(mf.name))
+                        parts.Add((mf.name, mf.sharedMesh, prefab.transform.InverseTransformPoint(mf.transform.position), 1f));
+                bounds = OrdnanceModels.LocalBounds(prefab, skipLooseParts: true);
+            }
+            else
+            {
+                OrdnanceVisual(o, out string meshName, out float scale);
+                var mesh = HologramMesh(Meshes?.GetMesh(meshName));
+                if (mesh != null) parts.Add(("Visual", mesh, Vector3.zero, scale));
+                bounds = mesh != null ? new Bounds(mesh.bounds.center * scale, mesh.bounds.size * scale) : default;
+            }
+            if (parts.Count == 0) return null;
 
             var root = new GameObject("BA_HoloTemplate_" + o);
             root.SetActive(false);
             Object.DontDestroyOnLoad(root);
             root.layer = IgnoreRaycastLayer;
 
-            var visual = new GameObject("Visual");
-            visual.layer = IgnoreRaycastLayer;
-            visual.transform.SetParent(root.transform, false);
-            visual.transform.localScale = Vector3.one * scale;
-            visual.AddComponent<MeshFilter>().sharedMesh = mesh;
-            var mr = visual.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = new Material(Config.FindShader());
+            // One shared plain material for every template: it is only the "original" the game
+            // swaps its hologram material over, so a rebuilt template must not leave a new one behind.
+            if (_holoTemplateMaterial == null) _holoTemplateMaterial = new Material(Config.FindShader());
+
+            var renderers = new Il2CppSystem.Collections.Generic.List<MeshRenderer>();
+            foreach (var (name, mesh, offset, scale) in parts)
+            {
+                var visual = new GameObject(name);
+                visual.layer = IgnoreRaycastLayer;
+                visual.transform.SetParent(root.transform, false);
+                visual.transform.localPosition = offset;
+                visual.transform.localScale = Vector3.one * scale;
+                visual.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = visual.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = _holoTemplateMaterial;
+                renderers.Add(mr);
+            }
+
+            C4Rig.Bind(root.transform)?.Armed();          // the charge lands armed, so the preview is too
+            ClaymoreRig.Bind(root.transform)?.Deployed();   // and a claymore stands deployed
 
             // Bounds on the root, in root space, like the game's own prefabs.
             var box = root.AddComponent<BoxCollider>();
-            box.center = mesh.bounds.center * scale;
-            box.size = mesh.bounds.size * scale;
+            box.center = bounds.center;
+            box.size = bounds.size;
             box.isTrigger = true;
             box.enabled = false;
 
-            var renderers = new Il2CppSystem.Collections.Generic.List<MeshRenderer>();
-            renderers.Add(mr);
             var group = new MeshGroup
             {
                 m_renderers = renderers,
-                m_originalMaterial = mr.sharedMaterial,
+                m_originalMaterial = _holoTemplateMaterial,
                 m_materialType = MeshGroupMaterialType.LitOpaque,
             };
 

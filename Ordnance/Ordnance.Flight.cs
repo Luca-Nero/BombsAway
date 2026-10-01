@@ -198,6 +198,12 @@ namespace BombsAway
 
         private static float FlightRadius(GameObject obj)
         {
+            var bc = obj.GetComponent<BoxCollider>();
+            if (bc != null)
+            {
+                Vector3 h = Vector3.Scale(bc.size * 0.5f, obj.transform.lossyScale);
+                return Mathf.Clamp(Mathf.Min(h.x, Mathf.Min(h.y, h.z)), 0.01f, 0.1f);
+            }
             var mf = obj.GetComponent<MeshFilter>();
             var mesh = mf != null ? mf.sharedMesh : null;
             if (mesh == null) return 0.05f;

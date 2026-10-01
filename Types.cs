@@ -39,11 +39,14 @@ namespace BombsAway
         public ExplosionParams Params;
         public Color[] BaseColors;
         public Material[] FlashMats;          // the body's materials, for the fuse flash
+        public Renderer Blink;                // a status LED that blinks while it waits (C4)
+        public ClaymoreRig Clay;              // the claymore's lenses, where its lasers start
         public List<Material> Owned = new List<Material>();   // every Material made for this charge
         public bool Stuck;
         public bool HasHost;                  // stuck to a rigidbody (HostRb goes null if that is destroyed)
         public bool Armed;
         public float ProxScanAccum;
+        public float TripAt = -1f;            // claymore: when a laser was broken (<0 = not tripped)
         public bool RemoteTriggered;
         public Vector3 ThrowDir;
 
@@ -58,6 +61,14 @@ namespace BombsAway
         public float LandTime;
         public Quaternion LandRot;
         public LineRenderer[] SightLines;
+
+        // Smoke grenade, once lit (Ordnance.Smoke.cs): its effect (the jet), the cloud it feeds, its hiss, until when, and its colour.
+        public GameObject SmokeFx;
+        public SmokeCloud Cloud;
+        public AudioSource Hiss;
+        public float SmokeUntil = -1f;        // <0 = not lit
+        public float CanGoneAt = -1f;
+        public Color SmokeColor = Color.white;
     }
 
     internal class HomingMissileState
@@ -73,18 +84,25 @@ namespace BombsAway
         public bool Dead;
         public int Phase;                      
         public bool TopAttack;                   
-        public bool Unguided;                 
+        public bool Unguided;
+        public bool Beam, OnBeam;               // AT-4: converging on the centre line, then riding it
+        public Vector3 BeamOrigin, BeamDir;     // that line: the camera ray when it fired
         public float LaunchY;
         public float CruiseAlt;            
         public List<Material> Owned = new List<Material>();   // every Material made for this missile
         public ExplosionParams Params;
+        public MissileRig Rig;                  // bundled model: fins and nozzle glow
+        public RocketRig RocketRig;             // the AT-4's instead: flick-out fins and tracer
+        public TargetBody Body;                 // whole-body lock: aim at the ragdoll, not a limb
+        public TrailRenderer Trail;             // exhaust, emitting only while the motor burns
+        public AudioSource Motor;               // its roar, while the motor burns
     }
 
+    /// <summary>The Javelin's two attacks. The AT-4 has none: it flies where it is pointed.</summary>
     public enum AttackMode
     {
         Top,
-        Direct,
-        Unguided
+        Direct
     }
 
     public enum WarheadMode { HEAT, HE }
@@ -140,8 +158,6 @@ namespace BombsAway
         public int JetSpallCount = 0;
         public int ArcSteps = 12;
         public float DebrisRaysRatio = 0.04f;
-        public bool CameraFX = true;
-        public bool IsFullSphere => HSpreadDeg >= 360f && VSpreadDeg >= 360f;
 
         public static ExplosionParams FromGrenadeConfig(Vector3 origin)
         {
@@ -177,9 +193,40 @@ namespace BombsAway
                 ArcSteps = Config.ArcDebugSteps,
 
                 DebrisRaysRatio = Config.DebrisRaysRatio,
-                CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.DamageScale,
             };
+        }
+
+        /// <summary>Smoke grenade: a fuse, then smoke instead of a blast (Ordnance.Smoke.cs). Kind "Smoke" never detonates.</summary>
+        public static ExplosionParams FromSmokeConfig(Vector3 origin)
+        {
+            var p = FromGrenadeConfig(origin);
+            p.Kind = "Smoke";
+            p.FuseTime = Config.SmokeFuse;
+            p.FlashTime = 0f;
+            p.FragRayCount = 0;
+            p.ChargeKgTNT = 0f;
+            return p;
+        }
+
+        /// <summary>Flashbang: a fuse, a small blast without fragments, and the stun (Ordnance.Flash.cs).</summary>
+        public static ExplosionParams FromFlashConfig(Vector3 origin)
+        {
+            var p = FromGrenadeConfig(origin);
+            p.Kind = "Flash";
+            p.FuseTime = Config.FlashFuse;
+            p.FlashTime = 0f;
+            p.FragRayCount = 0;
+            p.FragPower = 0;
+            p.ChargeKgTNT = Config.FlashChargeKgTNT;
+            p.BlastRadius = 2f;
+            p.BlastForce = 0.3f;
+            p.BlastUpward = 0.2f;
+            p.OverpressureRadius = 0.5f;
+            p.OverpressureWoundPoints = 0;
+            p.DebrisRaysRatio = 0f;
+            p.DamageScale = 0.1f;
+            return p;
         }
 
         public static ExplosionParams FromC4Config(Vector3 origin)
@@ -214,7 +261,6 @@ namespace BombsAway
 
                 ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
-                CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.C4DamageScale,
             };
         }
@@ -256,7 +302,6 @@ namespace BombsAway
 
                 ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
-                CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MineDamageScale,
             };
         }
@@ -296,7 +341,6 @@ namespace BombsAway
 
                 ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
-                CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MissileDamageScale,
 
                 JetRays = Config.MissileJetRays,
@@ -342,7 +386,6 @@ namespace BombsAway
 
                 ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
-                CameraFX = Config.CamFXEnabled,
                 DamageScale = Config.MissileHEDamageScale,
             };
         }

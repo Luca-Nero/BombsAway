@@ -146,8 +146,13 @@ namespace BombsAway
 
             if (Config.CamFXEnabled) CameraFX.AddTrauma(x.Origin);
 
-            if (x.HasGround) ExplosionVFX.Spawn(x.Origin, x.Ground);
-            else             ExplosionVFX.SpawnAerial(x.Origin);
+            // The bundle's effect for this kind (ExplosionFx), or the old code-built one.
+            string kind = x.Spec.Id.Substring(SpecPrefix.Length);
+            if (!ExplosionFx.Play(kind, x.Origin, x.Forward, x.HasGround, x.Ground))
+            {
+                if (x.HasGround) ExplosionVFX.Spawn(x.Origin, x.Ground);
+                else             ExplosionVFX.SpawnAerial(x.Origin);
+            }
 
             if (Config.Dbg1)
                 MelonLogger.Msg($"Detonate {x.Spec.Id} at {x.Origin} | cone={x.Spec.HSpreadDeg:F0}x{x.Spec.VSpreadDeg:F0}° " +
@@ -169,21 +174,6 @@ namespace BombsAway
             var result = Physics.OverlapSphere(pos, radius, mask, q);
             count = result.Length;
             return result;
-        }
-
-        internal static float BallisticGroundTime(float gy, float vy, float dy, float maxTime)
-        {
-            float a = 0.5f * gy, b = vy, c = dy;
-            float disc = b * b - 4f * a * c;
-            if (disc < 0f) return maxTime;
-            float sq = Mathf.Sqrt(disc);
-            float t1 = (-b + sq) / (2f * a);
-            float t2 = (-b - sq) / (2f * a);
-            float tHit = -1f;
-            if (t1 > 0.001f && t2 > 0.001f) tHit = Mathf.Min(t1, t2);
-            else if (t1 > 0.001f) tHit = t1;
-            else if (t2 > 0.001f) tHit = t2;
-            return tHit > 0f ? Mathf.Min(tHit, maxTime) : maxTime;
         }
 
         internal static float EllipticalHalfAngle(float azimuth, float tanH, float tanV)

@@ -56,7 +56,14 @@ namespace BombsAway
             switch (ep.Detonation)
             {
                 case DetonationMode.Timer:
-                    if (g.Timer >= ep.FuseTime - ep.FlashTime && g.Obj != null)
+                    // A smoke grenade lights instead of going off, and burns on (Ordnance.Smoke.cs).
+                    if (ep.Kind == "Smoke")
+                    {
+                        if (g.SmokeUntil < 0f && g.Timer >= ep.FuseTime) LightSmoke(g);
+                        if (g.SmokeUntil >= 0f) TickSmoke(g);
+                        break;
+                    }
+                    if (ep.FlashTime > 0f && g.Timer >= ep.FuseTime - ep.FlashTime && g.Obj != null)
                     {
                         g.FlashAccum += dt;
                         if (g.FlashAccum >= Config.FlashRate)
@@ -86,37 +93,30 @@ namespace BombsAway
                     break;
 
                 case DetonationMode.Remote:
+                    if (g.Blink != null) g.Blink.enabled = (g.Timer % 1f) < 0.12f;
                     detonate = g.RemoteTriggered;
                     break;
 
                 case DetonationMode.Proximity:
                     if (g.Armed && g.Obj != null)
                     {
+                        // Tripped: the lenses flicker for MineTripDelay, then it goes.
+                        if (g.TripAt >= 0f)
+                        {
+                            g.Clay?.Lit(((int)((Time.time - g.TripAt) / 0.04f) & 1) == 0);
+                            detonate = Time.time - g.TripAt >= Config.MineTripDelay;
+                            break;
+                        }
                         g.ProxScanAccum += dt;
                         if (g.ProxScanAccum >= ep.ProximityInterval)
                         {
                             g.ProxScanAccum = 0f;
-                            if (ProximityScan(g)) {
-                                detonate = true;
-                            }
-                                
-                        }
-                    }
-                    break;
-
-                case DetonationMode.Impact:
-                    if (g.Armed && g.Obj != null)
-                    {
-                        Vector3 fwd = g.Obj.transform.forward;
-                        float castDist = ep.ImpactCastRange;
-                        if (Physics.SphereCast(g.Obj.transform.position, ep.ImpactCastRadius,
-                            fwd, out RaycastHit impactHit, castDist,
-                            Config.WorldLayerMask, QueryTriggerInteraction.Ignore))
-                        {
-                            if (impactHit.collider.gameObject != g.Obj)
+                            bool tripped = g.Clay != null && Config.MineTripwire ? LaserTripped(g) : ProximityScan(g);
+                            if (tripped)
                             {
-                                g.Obj.transform.position = impactHit.point;
-                                detonate = true;
+                                Sfx.Play("ClayTrip", g.Obj.transform.position);
+                                if (Config.MineTripDelay > 0f) g.TripAt = Time.time;
+                                else detonate = true;
                             }
                         }
                     }
@@ -146,8 +146,10 @@ namespace BombsAway
         /// <summary>Local offset of a stuck charge from the hit point (the Placement config).</summary>
         internal static Vector3 StickOffset(DetonationMode mode) => mode switch
         {
-            DetonationMode.Remote    => new Vector3(Config.C4LocalOffsetX, Config.C4LocalOffsetY, Config.C4LocalOffsetZ),
-            DetonationMode.Proximity => new Vector3(Config.MineLocalOffsetX, Config.MineLocalOffsetY, Config.MineLocalOffsetZ),
+            DetonationMode.Remote    => new Vector3(0f, OrdnanceModels.RestHeight(Ordnance.C4, 0.05f), 0f)
+                                      + new Vector3(Config.C4StickNudgeX, Config.C4StickNudgeY, Config.C4StickNudgeZ),
+            DetonationMode.Proximity => new Vector3(0f, OrdnanceModels.RestHeight(Ordnance.Claymore, 0.08f), 0f)
+                                      + new Vector3(Config.MineStickNudgeX, Config.MineStickNudgeY, Config.MineStickNudgeZ),
             _ => Vector3.zero,
         };
 
@@ -220,6 +222,9 @@ namespace BombsAway
 
         private static void Explode(GrenadeState g)
         {
+            // Smoke never goes off as a blast: shot or chained, it only lights.
+            if (g.Params.Kind == "Smoke") { LightSmoke(g); return; }
+
             // Nothing to go off if the game already destroyed it: there is no origin to blow up at.
             if (g.Obj == null)
             {
@@ -232,6 +237,10 @@ namespace BombsAway
             g.Params.Forward = g.Obj.transform.forward;
             if (g.Stuck)
                 origin += g.Obj.transform.up * Config.StickyExplosionLift;
+            // C4 throws everything off the surface it sits on, and its blast is round anyway: its
+            // forward is that surface's normal, which the effect aims its burst along (ExplosionFx).
+            if (g.Params.Kind == "C4")
+                g.Params.Forward = g.Obj.transform.up;
 
             var col = g.Obj.GetComponent<Collider>();
             if (col != null) col.enabled = false;
@@ -242,6 +251,35 @@ namespace BombsAway
             g.Dead = true;
             g.Params.Origin = origin;
             ExplosionSystem.Detonate(g.Params);
+            if (g.Params.Kind == "Flash") Flashbang.Bang(origin);
+        }
+
+        /// <summary>
+        /// A claymore's lasers as tripwires: true if a body is the first thing along any of the
+        /// three beams, out to MineProximityRange (a wall before it blocks that beam, as it
+        /// stops the beam you see).
+        /// </summary>
+        private static bool LaserTripped(GrenadeState g)
+        {
+            Transform t = g.Obj.transform;
+            float range = Config.MineProximityRange;
+            for (int i = 0; i < 3; i++)
+            {
+                g.Clay.Laser(i, t, out Vector3 o, out Vector3 d);
+                // The allocating overload: NonAlloc returns nothing in this build.
+                var hits = Physics.RaycastAll(o, d, range, Config.FragLayerMask | Config.WorldLayerMask, QueryTriggerInteraction.Ignore);
+                Collider first = null;
+                float best = float.MaxValue;
+                foreach (var h in hits)
+                {
+                    if (h.collider == null || h.collider.transform.IsChildOf(t)) continue;
+                    if (h.distance < best) { best = h.distance; first = h.collider; }
+                }
+                if (first == null || !ExplosionSystem.IsLimb(first.gameObject)) continue;
+                if (Config.Dbg1) MelonLogger.Msg($"[Claymore] Laser {i} broken by '{first.gameObject.name}' at {best:F1} m");
+                return true;
+            }
+            return false;
         }
 
         private static bool ProximityScan(GrenadeState g)
@@ -328,6 +366,22 @@ namespace BombsAway
             if (g.SightLines == null || g.Obj == null) return;
 
             Transform t = g.Obj.transform;
+            if (g.Clay != null)
+            {
+                // From the lenses, and only as far as the first thing in the way.
+                float range = Config.MineProximityRange;
+                for (int i = 0; i < 3; i++)
+                {
+                    g.Clay.Laser(i, t, out Vector3 o, out Vector3 d);
+                    float reach = range;
+                    if (Physics.Raycast(o, d, out RaycastHit hit, range, Config.WorldLayerMask, QueryTriggerInteraction.Ignore)
+                        && !hit.collider.transform.IsChildOf(t))
+                        reach = hit.distance;
+                    g.SightLines[i].SetPosition(0, o);
+                    g.SightLines[i].SetPosition(1, o + d * reach);
+                }
+                return;
+            }
             Vector3 centre = new Vector3(
                 Config.MineSightOriginX,
                 Config.MineSightOriginY,
