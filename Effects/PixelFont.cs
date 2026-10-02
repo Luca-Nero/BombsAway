@@ -111,6 +111,17 @@ namespace BombsAway
             return t;
         }
 
+        private static readonly Dictionary<char, string> _bits = new Dictionary<char, string>();
+
+        /// <summary>A glyph's GW x GH cells, top row first, '#' lit; null if there is none. For drawing into textures (LrfDisplay).</summary>
+        public static string Bits(char c)
+        {
+            if (_bits.TryGetValue(c, out var b)) return b;
+            b = Glyphs.TryGetValue(c, out var def) ? def.Replace(" ", "") : null;
+            _bits[c] = b;
+            return b;
+        }
+
         /// <summary>Screen width of <paramref name="s"/> at <paramref name="px"/> screen pixels per font pixel.</summary>
         public static float Width(string s, float px) => s.Length == 0 ? 0f : (s.Length * (GW + 1) - 1) * px;
 

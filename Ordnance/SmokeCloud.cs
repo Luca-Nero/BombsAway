@@ -22,6 +22,10 @@ namespace BombsAway
     ///
     /// Blasts and rockets push the smoke (Blast, Wake): its parcels are thrown aside, and the
     /// hole itself is a void (SmokeVoids) the shader cuts out until the smoke closes in again.
+    ///
+    /// Smoke hides things (Transmittance): the Javelin's day and night sights can't lock through
+    /// it, and it shields eyes from a flashbang. Thermal sees through it: the boxes sit on a
+    /// layer of their own (LayerBit) that the CLU's thermal views leave out.
     /// </summary>
     internal sealed class SmokeCloud
     {
@@ -45,12 +49,11 @@ namespace BombsAway
         /// <summary>Clouds alive now (the HUD's debug readout).</summary>
         public static int Count => _all.Count;
 
-        private SmokeCloud(GameObject box, Transform vent, float burnFor, Color colour)
+        private SmokeCloud(GameObject box, Transform vent, float burnFor, Color colour, SmokePlume.Settings s)
         {
             _box = box; _vent = vent;
             _ventAt = vent.position;
             _burnUntil = Time.time + burnFor;
-            var s = SmokePlume.Settings.Defaults;
             s.Mask = Config.WorldLayerMask;
             _plume = new SmokePlume(s) { Colour = colour };
 
@@ -60,6 +63,9 @@ namespace BombsAway
             _tex.wrapMode = TextureWrapMode.Clamp;
             _tex.filterMode = FilterMode.Bilinear;
             _px = new Il2CppStructArray<Color>(SmokeGrid.Count);
+
+            int layer = SmokeLayer();
+            if (layer >= 0) box.layer = layer;
 
             var r = box.GetComponent<Renderer>();
             _mat = new Material(r.sharedMaterial);
@@ -76,12 +82,16 @@ namespace BombsAway
         /// the smoke outlives it.
         /// </summary>
         public static SmokeCloud Start(GameObject volume, Transform vent, float burnFor, Color colour)
+            => Start(volume, vent, burnFor, colour, SmokePlume.Settings.Defaults);
+
+        /// <summary>As above, venting as <paramref name="settings"/> says (a smoke shell's canister vents harder than a grenade).</summary>
+        public static SmokeCloud Start(GameObject volume, Transform vent, float burnFor, Color colour, SmokePlume.Settings settings)
         {
             if (volume == null || vent == null || volume.GetComponent<Renderer>() == null) return null;
             var t = volume.transform;
             t.SetParent(null, false);
             t.rotation = Quaternion.identity;
-            var c = new SmokeCloud(volume, vent, burnFor, colour);
+            var c = new SmokeCloud(volume, vent, burnFor, colour, settings);
             _all.Add(c);
             return c;
         }
@@ -109,6 +119,8 @@ namespace BombsAway
                 }
                 if (!alive) { c.Destroy(); _all.RemoveAt(i); }
             }
+
+            ShowLayer();
 
             // Smoke that meets is drawn from one grid, by the first cloud of its group.
             _plumes.Clear(); _byPlume.Clear();
@@ -167,6 +179,64 @@ namespace BombsAway
         {
             _plumes.Clear();
             foreach (var c in _all) _plumes.Add(c._plume);
+        }
+
+        /// <summary>
+        /// Share of the view from <paramref name="from"/> to <paramref name="to"/> left through
+        /// the smoke (1 = clear, or SmokeBlocksSight off). A metre of solid smoke leaves about 8 %.
+        /// </summary>
+        public static float Transmittance(Vector3 from, Vector3 to)
+        {
+            if (_all.Count == 0 || !Config.SmokeBlocksSight) return 1f;
+            Plumes();
+            return SmokeSight.Transmittance(_plumes, _voids, from, to);
+        }
+
+        // ── The smoke's layer ───────────────────────────────────────────────────
+
+        private static int _layer = -2;   // -2: not picked yet; -1: none, the boxes stay on Default
+
+        /// <summary>The smoke boxes' layer as a mask bit; 0 if they have none of their own.</summary>
+        public static int LayerBit => _layer >= 0 ? 1 << _layer : 0;
+
+        /// <summary>
+        /// A free layer for the boxes, so a camera can leave smoke out (the CLU's thermal views).
+        /// Only taken if the pipeline's renderer draws transparent things on it; otherwise the
+        /// smoke would vanish for everyone, so it stays where it was.
+        /// </summary>
+        private static int SmokeLayer()
+        {
+            if (_layer != -2) return _layer;
+            _layer = -1;
+            try
+            {
+                int l = FreeLayers.Take("Smoke");
+                if (l < 0) { MelonLogger.Warning("[Smoke] no free layer: thermal sights see the smoke."); return -1; }
+                var asset = UnityEngine.Rendering.Universal.UniversalRenderPipeline.asset;
+                var list = asset != null ? asset.m_RendererDataList : null;
+                if (list != null)
+                    foreach (var d in list)
+                    {
+                        var u = d != null ? d.TryCast<UnityEngine.Rendering.Universal.UniversalRendererData>() : null;
+                        if (u != null && (u.transparentLayerMask.value & (1 << l)) == 0)
+                        {
+                            MelonLogger.Warning($"[Smoke] the renderer doesn't draw transparent layer {l}: thermal sights see the smoke.");
+                            return -1;
+                        }
+                    }
+                _layer = l;
+                if (Config.Dbg1) MelonLogger.Msg($"[Smoke] boxes on layer {l}.");
+            }
+            catch (System.Exception e) { MelonLogger.Warning($"[Smoke] picking a layer failed ({e.Message}): thermal sights see the smoke."); }
+            return _layer;
+        }
+
+        /// <summary>The world camera must draw the smoke's layer (a free layer may be left out of its mask).</summary>
+        private static void ShowLayer()
+        {
+            int bit = LayerBit;
+            var cam = CameraCache.Main;
+            if (bit != 0 && cam != null && (cam.cullingMask & bit) == 0) cam.cullingMask |= bit;
         }
 
         /// <summary>Room round the smoke for the shader's warp.</summary>

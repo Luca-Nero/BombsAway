@@ -59,9 +59,10 @@ namespace BombsAway
         private static C4Rig _rig;
         private static ClaymoreRig _clay;
         private static JavelinClu _clu;
+        private static LrfDisplay _lrf;                     // the binoculars' screen
         private static WarheadLabel _label;                  // a launcher's HEAT / HE stencil
         private static float _ads;                          // 0 = at the hip, 1 = up at the eye (launcher)
-        private static float _heldDisplayH;                 // the CLU display's height, metres
+        private static float _heldDisplayH;                 // the CLU's or the LRF's display height, metres
         private static Transform _heldPin, _heldSpoon;
         private static Vector3 _heldHome, _heldLowered;   // root local position: in hand / out of view
         private static float _raise = 1f;                  // 0 = lowered, 1 = in hand
@@ -123,12 +124,14 @@ namespace BombsAway
         {
             _clu?.Dispose();
             _clu = null;
+            _lrf?.Dispose();
+            _lrf = null;
             _label?.Dispose();
             _label = null;
             DropAT4();
         }
 
-        private static string WarheadText => MissileWarheadMode == WarheadMode.HE ? "HE" : "HEAT";
+        private static string WarheadText => MissileWarheadMode.ToString();   // "HEAT", "HE", "TBX"
 
         private static void DetachHeld()
         {
@@ -154,7 +157,7 @@ namespace BombsAway
             _held.layer = _heldParent.gameObject.layer;
             // The AT-4 on the viewmodel camera: at the eye its tube runs back past the cheek,
             // inside the world camera's near plane (Effects/ViewmodelCamera.cs).
-            if (_heldKind == Ordnance.Rocket)
+            if (_heldKind == Ordnance.Rocket || _heldKind == Ordnance.Binoculars)
             {
                 int vm = ViewmodelCamera.Layer(cam);
                 if (vm >= 0) _held.layer = vm;
@@ -168,9 +171,10 @@ namespace BombsAway
             _rig?.Safe();
             _clay = ClaymoreRig.Bind(_held.transform);
             _clay?.Stowed();
-            if (_heldKind == Ordnance.Missile)
+            if (_heldKind == Ordnance.Missile || _heldKind == Ordnance.Binoculars)
             {
-                _clu = JavelinClu.Attach(_held.transform);
+                if (_heldKind == Ordnance.Missile) _clu = JavelinClu.Attach(_held.transform);
+                else _lrf = LrfDisplay.Attach(_held.transform);
                 var hud = _held.transform.Find("Hud");
                 _heldDisplayH = hud != null ? hud.GetComponent<MeshFilter>().sharedMesh.bounds.size.y : 0.1f;
             }
@@ -231,6 +235,12 @@ namespace BombsAway
             {
                 offset = new Vector3(Config.AT4CarryOffsetX, Config.AT4CarryOffsetY, Config.AT4CarryOffsetZ);
                 euler = new Vector3(Config.AT4CarryPitch, Config.AT4CarryYaw, Config.AT4CarryRoll);
+                return;
+            }
+            if (o == Ordnance.Binoculars)
+            {
+                offset = new Vector3(Config.BinoHipOffsetX, Config.BinoHipOffsetY, Config.BinoHipOffsetZ);
+                euler = new Vector3(Config.BinoHipPitch, Config.BinoHipYaw, Config.BinoHipRoll);
                 return;
             }
             if (o == Ordnance.Claymore)
@@ -651,9 +661,11 @@ namespace BombsAway
         {
             if (_held == null) { if (_ads > 0f) { _ads = 0f; AdsBlur.Set(0f); } return; }
             if (HeldPose(out Vector3 pos, out Quaternion rot)) _held.transform.SetPositionAndRotation(pos, rot);
-            AdsBlur.Set(_heldKind == Ordnance.Missile ? _ads : 0f);   // iron sights: nothing to blur around
-            if (_heldKind == Ordnance.Rocket) ViewmodelCamera.Sync();
+            // Screens blur the world round them; iron sights have nothing to blur around.
+            AdsBlur.Set(_heldKind == Ordnance.Missile ? _ads : _lrf != null ? BinocularView.Ads : 0f);
+            if (_heldKind == Ordnance.Rocket || _heldKind == Ordnance.Binoculars) ViewmodelCamera.Sync();
             _label?.Tick(Time.deltaTime, WarheadText);
+            _lrf?.Tick(BinocularView.Ads, LrfStateNow(), BinocularView.Zoom);
 
             _clu?.Tick(_ads, new CluState
             {
@@ -679,16 +691,21 @@ namespace BombsAway
             Transform t = _held.transform;
             pos = t.position; rot = t.rotation;
             var cam = Camera.main;
-            if (_ads <= 0.001f || cam == null) return false;
-            float e = _ads * _ads * (3f - 2f * _ads);
+            bool bino = _heldKind == Ordnance.Binoculars;
+            float ads = bino ? BinocularView.Ads : _ads;
+            if (ads <= 0.001f || cam == null) return false;
+            float e = ads * ads * (3f - 2f * ads);
             float d;
             if (_heldKind == Ordnance.Rocket) d = Config.AT4EyeRelief;   // the root is the rear aperture
             else
             {
+                // The root is the display's centre: far enough out that it fills its share of the view.
                 float tanHalf = Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
-                d = (_heldDisplayH * 0.5f) / (Mathf.Clamp(Config.AdsScreenFraction, 0.2f, 1f) * tanHalf);
+                float share = bino ? Config.BinoScreenFraction : Config.AdsScreenFraction;
+                d = (_heldDisplayH * 0.5f) / (Mathf.Clamp(share, 0.2f, 1f) * tanHalf);
             }
-            d = Mathf.Max(d, cam.nearClipPlane + 0.03f);
+            // The binoculars are drawn by the viewmodel camera (near plane 1 cm), the CLU by the world's.
+            d = Mathf.Max(d, bino ? 0.04f : cam.nearClipPlane + 0.03f);
             Vector3 adsPos = cam.transform.position + cam.transform.forward * d;
             Quaternion adsRot = cam.transform.rotation * KickRotation();
             pos = Vector3.Lerp(pos, adsPos, e);
@@ -732,6 +749,27 @@ namespace BombsAway
             HeldPose(out Vector3 rootPos, out Quaternion rootRot);
             muzzleW = rootPos + rootRot * muzzle.localPosition;
             breechW = rootPos + rootRot * breech.localPosition;
+            return true;
+        }
+
+        /// <summary>
+        /// Where the binoculars' screen camera is this frame and the way it looks, through the
+        /// lifted pose. During Update the model still stands at the hip (LateUpdate lifts it), so
+        /// its camera's own transform points wherever the hip pose does: the lase must read the
+        /// camera through HeldPose, as HeldEnds does for a launcher's tube.
+        /// </summary>
+        internal static bool HeldFeed(out Vector3 pos, out Vector3 fwd)
+        {
+            pos = fwd = default;
+            var feed = _lrf?.Feed;
+            if (_held == null || feed == null) return false;
+            Transform t = _held.transform, c = feed.transform;
+            Quaternion inv = Quaternion.Inverse(t.rotation);
+            Vector3 localPos = inv * (c.position - t.position);
+            Quaternion localRot = inv * c.rotation;
+            HeldPose(out Vector3 rootPos, out Quaternion rootRot);
+            pos = rootPos + rootRot * localPos;
+            fwd = rootRot * localRot * Vector3.forward;
             return true;
         }
 

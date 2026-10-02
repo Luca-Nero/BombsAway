@@ -45,7 +45,9 @@ namespace BombsAway
                 SpecFor(ExplosionParams.FromClaymoreConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromMissileConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromMissileHEConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromMissileTBXConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromArtilleryConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromMortarConfig(Vector3.zero));
             }
             catch (System.Exception e) { MelonLogger.Warning($"[Explosion] pre-registering specs failed: {e.Message}"); }
         }
@@ -70,6 +72,8 @@ namespace BombsAway
                 _specs[id] = s;
             }
 
+            s.Features = p.Features;
+            s.BlastDiffraction = p.BlastDiffraction;
             s.HSpreadDeg = p.HSpreadDeg;
             s.VSpreadDeg = p.VSpreadDeg;
 
@@ -134,6 +138,7 @@ namespace BombsAway
                 case "C4":        return 4f;
                 case "MissileHE": return 1.5f;
                 case "Arty155":   return 3f;     // a thick forged body: heavier, slower pieces
+                case "Mortar81":  return 1.2f;   // a thin cast-iron body: small, fast pieces
                 default:          return 2f;
             }
         }
@@ -157,9 +162,9 @@ namespace BombsAway
 
             // The bundle's effect for this kind (ExplosionFx), or the old code-built one.
             string kind = x.Spec.Id.Substring(SpecPrefix.Length);
-            // A kind without its own effect yet borrows the nearest one (the shell: the HE warhead's).
+            // A kind without its own effect yet borrows the nearest one (the shells: the HE warhead's).
             if (!ExplosionFx.Play(kind, x.Origin, x.Forward, x.HasGround, x.Ground)
-                && !(kind == "Arty155" && ExplosionFx.Play("MissileHE", x.Origin, x.Forward, x.HasGround, x.Ground)))
+                && !(BorrowsFx(kind, out string stand) && ExplosionFx.Play(stand, x.Origin, x.Forward, x.HasGround, x.Ground)))
             {
                 if (x.HasGround) ExplosionVFX.Spawn(x.Origin, x.Ground);
                 else             ExplosionVFX.SpawnAerial(x.Origin);
@@ -168,6 +173,13 @@ namespace BombsAway
             if (Config.Dbg1)
                 MelonLogger.Msg($"Detonate {x.Spec.Id} at {x.Origin} | cone={x.Spec.HSpreadDeg:F0}x{x.Spec.VSpreadDeg:F0}° " +
                                 $"fwd={x.Forward}{(x.Cosmetic ? " | cosmetic" : "")}");
+        }
+
+        /// <summary>The effect a kind borrows while it has none of its own in the bundle.</summary>
+        private static bool BorrowsFx(string kind, out string stand)
+        {
+            stand = kind == "Arty155" || kind == "Mortar81" || kind == "MissileTBX" ? "MissileHE" : null;
+            return stand != null;
         }
 
         private static void OnDebris(ExplosionSpec s, Vector3 p0, Vector3 vel, float flightTime)

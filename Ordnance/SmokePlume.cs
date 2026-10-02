@@ -450,6 +450,30 @@ namespace BombsAway
         public void Clear() => _v.Clear();
 
         /// <summary>
+        /// What is left of the smoke at <paramref name="p"/> once the voids are cut out (1 = all
+        /// of it): the shader's Carve, without the noise on the edge.
+        /// </summary>
+        public float Cut(Vector3 p)
+        {
+            float k = 1f;
+            foreach (var v in _v)
+            {
+                float u = v.Age / v.Life;
+                float r = v.R * Mathf.Lerp(1f, 0.4f, u);
+                if (v.Open > 0f) r *= Mathf.Min(1f, 0.35f + 0.65f * v.Age / v.Open);
+                float s = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.55f, 1f, u));
+                if (s <= 0.01f) continue;
+                var ab = v.B - v.A;
+                float h = Mathf.Clamp01(Vector3.Dot(p - v.A, ab) / Mathf.Max(ab.sqrMagnitude, 1e-6f));
+                float d = (p - v.A - ab * h).magnitude;
+                if (d >= r) continue;
+                float e = Mathf.Clamp01((d - 0.7f * r) / (0.3f * r));
+                k *= 1f - s * (1f - e * e * (3f - 2f * e));
+            }
+            return k;
+        }
+
+        /// <summary>
         /// The voids that reach into the box <paramref name="lo"/>..<paramref name="hi"/>, for
         /// SmokeVolume.shader's _Voids: two per void, (A, radius) and (B, strength). Returns how many.
         /// </summary>
@@ -478,9 +502,12 @@ namespace BombsAway
             => p.x >= lo.x && p.y >= lo.y && p.z >= lo.z && p.x <= hi.x && p.y <= hi.y && p.z <= hi.z;
 
         /// <summary>Whether the segment a..b passes through the box (slab test).</summary>
-        private static bool Crosses(Vector3 a, Vector3 b, Vector3 lo, Vector3 hi)
+        private static bool Crosses(Vector3 a, Vector3 b, Vector3 lo, Vector3 hi) => Clip(a, b, lo, hi, out _, out _);
+
+        /// <summary>The part of the segment a..b inside the box, as fractions t0..t1 of it; false if none.</summary>
+        public static bool Clip(Vector3 a, Vector3 b, Vector3 lo, Vector3 hi, out float t0, out float t1)
         {
-            float t0 = 0f, t1 = 1f;
+            t0 = 0f; t1 = 1f;
             var d = b - a;
             for (int k = 0; k < 3; k++)
             {
@@ -496,6 +523,80 @@ namespace BombsAway
                 if (t0 > t1) return false;
             }
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Seeing through smoke: how much of the light from one point reaches another through every
+    /// plume, for what smoke should hide (a day sight's lock, a flashbang's flash). Samples the
+    /// same density the grid is splatted from, along the line instead of into voxels, with the
+    /// voids cut out. Thin smoke the volume doesn't draw (below ThinAt) hides nothing; smoke as
+    /// thick as the drawn solid (the shader's 0.5) takes out Extinction of the light per metre.
+    /// </summary>
+    internal static class SmokeSight
+    {
+        public const float Step = 0.25f;        // metres between samples
+        public const int MaxSamples = 320;      // a longer stretch samples coarser
+        public const float ThinAt = 0.2f;       // density below which smoke hides nothing
+        public const float SolidAt = 0.6f;      // density from which it hides fully, per metre
+        public const float Extinction = 2.5f;   // per metre of solid smoke: 1 m leaves 8 %
+
+        private static readonly float[] _rho = new float[MaxSamples];
+
+        /// <summary>Share of the light from <paramref name="a"/> that reaches <paramref name="b"/> (1 = clear air).</summary>
+        public static float Transmittance(List<SmokePlume> plumes, SmokeVoids voids, Vector3 a, Vector3 b)
+        {
+            var ab = b - a;
+            float len = ab.magnitude;
+            if (len < 1e-3f || plumes.Count == 0) return 1f;
+            var dir = ab / len;
+
+            // Only the stretch of the line inside some plume's smoke is sampled.
+            float t0 = float.MaxValue, t1 = float.MinValue;
+            foreach (var pl in plumes)
+                if (pl.Bounds(0f, out var lo, out var hi) && SmokeVoids.Clip(a, b, lo, hi, out float u0, out float u1))
+                {
+                    t0 = Mathf.Min(t0, u0 * len);
+                    t1 = Mathf.Max(t1, u1 * len);
+                }
+            if (t1 <= t0) return 1f;
+            int n = Mathf.Clamp(Mathf.CeilToInt((t1 - t0) / Step), 1, MaxSamples);
+            float ds = (t1 - t0) / n;
+            System.Array.Clear(_rho, 0, n);
+
+            // Each parcel adds its splat (the grid's weight, 1 - d^2/k^2 squared) to the samples
+            // its ball covers: one pass over the parcels, not one per sample.
+            foreach (var pl in plumes)
+                foreach (var p in pl.Parcels)
+                {
+                    float amp = pl.Amp(p);
+                    if (amp < 0.005f) continue;
+                    float k = p.R * SmokePlume.Reach, k2 = k * k;
+                    var rel = p.Pos - a;
+                    float tc = Vector3.Dot(rel, dir);
+                    float h2 = rel.sqrMagnitude - tc * tc;
+                    if (h2 >= k2) continue;
+                    float half = Mathf.Sqrt(k2 - h2);
+                    int i0 = Mathf.Max(0, Mathf.CeilToInt((tc - half - t0) / ds - 0.5f));
+                    int i1 = Mathf.Min(n - 1, Mathf.FloorToInt((tc + half - t0) / ds - 0.5f));
+                    for (int i = i0; i <= i1; i++)
+                    {
+                        float t = t0 + (i + 0.5f) * ds - tc;
+                        float w = 1f - (h2 + t * t) / k2;
+                        if (w > 0f) _rho[i] += w * w * amp;
+                    }
+                }
+
+            float tau = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float rho = _rho[i];
+                if (rho <= ThinAt) continue;
+                if (voids != null && voids.Count > 0) rho *= voids.Cut(a + dir * (t0 + (i + 0.5f) * ds));
+                float o = Mathf.Clamp01((rho - ThinAt) / (SolidAt - ThinAt));
+                tau += o * o * (3f - 2f * o) * ds;
+            }
+            return Mathf.Exp(-Extinction * tau);
         }
     }
 }

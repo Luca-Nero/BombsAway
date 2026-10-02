@@ -96,6 +96,9 @@ namespace BombsAway
         public TargetBody Body;                 // whole-body lock: aim at the ragdoll, not a limb
         public TrailRenderer Trail;             // exhaust, emitting only while the motor burns
         public AudioSource Motor;               // its roar, while the motor burns
+        public bool Thermal;                    // fired from a thermal view: smoke doesn't hide its target
+        public bool Hidden;                     // smoke hides the target: flying at where it was last seen
+        public float NextSightCheck;
     }
 
     /// <summary>The Javelin's two attacks. The AT-4 has none: it flies where it is pointed.</summary>
@@ -105,7 +108,8 @@ namespace BombsAway
         Direct
     }
 
-    public enum WarheadMode { HEAT, HE }
+    /// <summary>The launchers' warheads: shaped charge, high explosive, thermobaric. Cycled in this order.</summary>
+    public enum WarheadMode { HEAT, HE, TBX }
 
     internal enum DetonationMode
     {
@@ -158,6 +162,10 @@ namespace BombsAway
         public int JetSpallCount = 0;
         public int ArcSteps = 12;
         public float DebrisRaysRatio = 0.04f;
+        /// <summary>Which parts of FruitLib's detonation run (all, unless the kind leaves some out).</summary>
+        public FruitLib.ExplosionFeatures Features = FruitLib.ExplosionFeatures.All;
+        /// <summary>What still reaches something behind full cover, 0..1 (FruitLib's default 0.15).</summary>
+        public float BlastDiffraction = 0.15f;
 
         public static ExplosionParams FromGrenadeConfig(Vector3 origin)
         {
@@ -391,6 +399,60 @@ namespace BombsAway
         }
 
         /// <summary>
+        /// The thermobaric warhead's main charge: the fuel cloud the warhead dispersed, ignited
+        /// (Missile/Thermobaric.cs). All blast and no fragments: a longer, wider pressure wave
+        /// than the HE warhead's for its weight, and one that fills rooms and spills round
+        /// corners (BlastDiffraction well over the usual 0.15), so cover helps far less.
+        /// </summary>
+        public static ExplosionParams FromMissileTBXConfig(Vector3 origin)
+        {
+            return new ExplosionParams
+            {
+                Kind = "MissileTBX",
+                ChargeKgTNT = Config.MissileTBXChargeKgTNT,
+                FragPower = 1000,
+                MeshName = "Javelin_mesh",
+                Sticky = false,
+
+                Detonation = DetonationMode.Impact,
+                ImpactCastRadius = 0.15f,
+                ImpactCastRange = 0.3f,
+                ArmDelay = Config.MissileSoftLaunchTime,
+
+                Origin = origin,
+                Forward = Vector3.forward,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = Config.MissileTBXBlastRadius,
+                BlastForce = Config.MissileTBXBlastForce,
+                BlastUpward = Config.MissileTBXBlastUpward,
+
+                OverpressureRadius = Config.MissileTBXOverpressureRadius,
+                OverpressureFalloffExp = 0.7f,
+                OverpressureWoundPoints = Config.MissileTBXOverpressureWoundPoints,
+
+                FragRayCount = 0,
+                FragSpeed = 15f,
+                FragMaxTime = 1f,
+                FragImpulse = 0f,
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = 0f,
+                DamageScale = Config.MissileTBXDamageScale,
+
+                Features = FruitLib.ExplosionFeatures.BlastOnly,
+                BlastDiffraction = Mathf.Clamp01(Config.MissileTBXDiffraction),
+            };
+        }
+
+        /// <summary>The warhead the launchers carry now, as its explosion.</summary>
+        public static ExplosionParams ForWarhead(WarheadMode w) =>
+            w == WarheadMode.HE ? FromMissileHEConfig(Vector3.zero)
+            : w == WarheadMode.TBX ? FromMissileTBXConfig(Vector3.zero)
+            : FromMissileConfig(Vector3.zero);
+
+        /// <summary>
         /// A 155 mm HE shell (M795: about 10.8 kg of TNT in a thick steel body, ~6.6 kg TNT
         /// equivalent of blast), point-detonating where it lands (FireSupport/FireMission.cs).
         /// </summary>
@@ -425,6 +487,44 @@ namespace BombsAway
                 ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.ArtyDamageScale,
+            };
+        }
+
+        /// <summary>
+        /// An 81 mm mortar bomb (M821: about 0.7 kg of Comp B in a thin body, ~0.95 kg TNT
+        /// equivalent), point-detonating where it lands (FireSupport/FireMission.cs).
+        /// </summary>
+        public static ExplosionParams FromMortarConfig(Vector3 origin)
+        {
+            return new ExplosionParams
+            {
+                Kind = "Mortar81",
+                FragPower = Config.MortarFragPower,
+                ChargeKgTNT = Config.MortarChargeKgTNT,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.up,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = Config.MortarBlastRadius,
+                BlastForce = Config.MortarBlastForce,
+                BlastUpward = Config.MortarBlastUpward,
+
+                OverpressureRadius = Config.MortarOverpressureRadius,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = Config.MortarOverpressureWoundPoints,
+
+                FragRayCount = Config.MortarFragRayCount,
+                FragSpeed = Config.MortarFragSpeed,
+                FragMaxTime = Config.MortarFragMaxTime,
+                FragImpulse = Config.MortarFragImpulse,
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = Config.DebrisRaysRatio,
+                DamageScale = Config.MortarDamageScale,
             };
         }
 

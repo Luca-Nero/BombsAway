@@ -16,9 +16,11 @@ namespace BombsAway
     ///
     /// Sight: 1 within FlashFullRange, then inverse square; times the eye's cone (full inside
     /// FlashFocusAngle of where the eyes point, fading through FlashPeripheralAngle, nothing
-    /// behind); times FlashOcclusion if the bang can't see the eyes. That is the direct light.
-    /// Light bounced off walls (a bang in a room blinds whichever way you face) comes in as a
-    /// second term, <see cref="Reflected"/>, which ignores the cone - not modelled yet.
+    /// behind); times FlashOcclusion if the bang can't see the eyes; times what smoke on the way
+    /// lets through. That is the direct light. Light bounced off walls, floor and ceiling comes
+    /// in as a second term (<see cref="Reflected"/>): every lit surface the eyes can see, through
+    /// the same cone, so in a room - where a lit wall is wherever you look - the bang blinds you
+    /// whichever way you face, while in the open, facing away, you only see unlit ground.
     ///
     /// Hearing: the same falloff, cover counting for less (FlashHearingOcclusion), and which way
     /// the head points doesn't matter.
@@ -69,6 +71,7 @@ namespace BombsAway
 
         public static void Bang(Vector3 origin)
         {
+            LightSurfaces(origin);
             PlayerEffect(origin);
 
             HumanoidPuppeteer[] all;
@@ -96,7 +99,7 @@ namespace BombsAway
                     {
                         Vector3 eye = head.worldCenterOfMass;
                         bool eyesVisible = InSight(origin, head, root);
-                        sight = Sight(origin, eye, head.transform.forward, eyesVisible, closeGate: true);
+                        sight = Sight(origin, eye, head.transform.forward, eyesVisible, out _, closeGate: true);
                         if (Config.DebugDrawExplosions)
                         {
                             ExplosionDebugDraw.Segment(eye, eye + head.transform.forward * 0.6f, new Color(0.25f, 0.9f, 0.85f), 0.012f);
@@ -145,7 +148,7 @@ namespace BombsAway
         /// head blinds it whichever way it faces: a body standing over the grenade looks past it
         /// (the cone points over it), yet the flash fills its view. Eased out over the metre beyond.
         /// </summary>
-        private static float Sight(Vector3 origin, Vector3 eye, Vector3 facing, bool inSight, bool closeGate = false)
+        private static float Sight(Vector3 origin, Vector3 eye, Vector3 facing, bool inSight, out float reflected, bool closeGate = false)
         {
             Vector3 to = origin - eye;
             float d = to.magnitude;
@@ -156,7 +159,11 @@ namespace BombsAway
                 cone = Mathf.Lerp(1f, cone, Mathf.SmoothStep(0f, 1f, d - close));
             }
             float direct = Falloff(d) * cone * (inSight ? 1f : Config.FlashOcclusion);
-            return Mathf.Clamp01(direct + Reflected(origin, eye));
+            // Smoke between: what it lets through (a flash in smoke is lost in it).
+            if (direct > 0.001f) direct *= SmokeCloud.Transmittance(origin + Vector3.up * 0.1f, eye);
+            // Already full: the bounce can't add anything, and costs a ray per lit surface.
+            reflected = direct >= 1f ? 0f : Reflected(eye, facing);
+            return Mathf.Clamp01(direct + reflected);
         }
 
         /// <summary>
@@ -173,15 +180,93 @@ namespace BombsAway
             return Mathf.Lerp(1f, Config.FlashPeripheralStrength, t) * Mathf.Clamp01((peripheral - angle) / 10f);
         }
 
+        // ── Light off walls ─────────────────────────────────────────────────────
+        //
+        // The bang's light is followed out along FlashReflectRays rays spread evenly over the
+        // sphere (each carrying its share of the light) to the first wall, floor or ceiling
+        // within FlashReflectRange: those are the lit surfaces, found once per bang. A surface
+        // throws its share back as a matt one does (strongest along its normal), and an eye sees
+        // it if nothing stands between, through its cone, falling off with the square of the
+        // distance. In a room nearly every ray finds a wall a few metres off and some lit wall
+        // fills any view; in the open only the ground round the can is lit, behind you if you
+        // face away. Diffuse light blinds far less than the flash itself (a point of light on the
+        // retina), so its scale is kept well under the direct term's; FlashReflection scales it.
+
+        private struct Lit
+        {
+            public Vector3 At, Normal;
+            public float Share;   // of the bang's light, after any smoke on the way
+        }
+
+        private static readonly List<Lit> _lit = new List<Lit>();
+        private static Vector3 _litFrom;
+
+        /// <summary>Finds the surfaces the bang at <paramref name="origin"/> lights.</summary>
+        private static void LightSurfaces(Vector3 origin)
+        {
+            _lit.Clear();
+            if (Config.FlashReflection <= 0f) return;
+            int n = Mathf.Clamp(Config.FlashReflectRays, 8, 512);
+            float range = Mathf.Max(1f, Config.FlashReflectRange);
+            Vector3 o = origin + Vector3.up * 0.1f;   // a can on the floor: not from the floor's own surface
+            _litFrom = o;
+            float golden = Mathf.PI * (3f - Mathf.Sqrt(5f));
+            bool smoke = SmokeCloud.Count > 0;
+            for (int i = 0; i < n; i++)
+            {
+                float y = 1f - 2f * (i + 0.5f) / n;
+                float r = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+                float a = i * golden;
+                var dir = new Vector3(r * Mathf.Cos(a), y, r * Mathf.Sin(a));
+                if (!Physics.Raycast(o, dir, out RaycastHit hit, range, Config.WorldLayerMask, QueryTriggerInteraction.Ignore)) continue;
+                float share = 1f / n;
+                if (smoke) share *= SmokeCloud.Transmittance(o, hit.point);
+                if (share < 1e-4f) continue;
+                _lit.Add(new Lit { At = hit.point + hit.normal * 0.05f, Normal = hit.normal, Share = share });
+                if (Config.DebugDrawExplosions)
+                    ExplosionDebugDraw.Segment(hit.point, hit.point + hit.normal * 0.25f, new Color(1f, 0.95f, 0.6f), 0.01f);
+            }
+            if (Config.Dbg1) MelonLogger.Msg($"[Flash] {_lit.Count} of {n} rays lit a surface within {range:F0} m");
+        }
+
         /// <summary>
-        /// Light reaching the eye off walls, floor and ceiling: it arrives from every side, so it
-        /// is added to the direct term without the cone, and is what makes a bang in a room blind
-        /// you facing away. Not modelled yet (0). The plan: rays from the bang measure how
-        /// enclosed it is (the share that hits within a few metres, and how near); that share x
-        /// a wall albedo x the falloff to the eye, only if the eye is in the same space (it sees
-        /// some of the lit surfaces). Shared by the player and bodies, so both pick it up at once.
+        /// The light reaching an eye at <paramref name="eye"/>, looking along
+        /// <paramref name="facing"/>, off the surfaces the bang lit: each one it can see, through
+        /// its cone, by how squarely the surface faces it and how near it is. In the direct
+        /// term's units (FlashFullRange squared), times FlashReflection.
         /// </summary>
-        private static float Reflected(Vector3 origin, Vector3 eye) => 0f;
+        private static float Reflected(Vector3 eye, Vector3 facing)
+        {
+            if (_lit.Count == 0 || (_litFrom - eye).sqrMagnitude > Sq(Config.FlashReflectRange * 2f + 5f)) return 0f;
+            bool smoke = SmokeCloud.Count > 0;
+            float sum = 0f;
+            foreach (var l in _lit)
+            {
+                Vector3 v = eye - l.At;
+                float r = v.magnitude;
+                if (r < 0.05f) continue;
+                Vector3 dir = v / r;
+                float cosOut = Vector3.Dot(l.Normal, dir);
+                if (cosOut <= 0f) continue;
+                float w = l.Share * cosOut * Cone(Vector3.Angle(facing, -dir)) / Mathf.Max(1f, r * r);
+                if (w < 1e-6f) continue;
+                // The eye has to see the surface (stopping short of the eye: a head's own collider).
+                if (r > 0.35f && Physics.Raycast(l.At, dir, r - 0.3f, Config.WorldLayerMask, QueryTriggerInteraction.Ignore)) continue;
+                if (smoke) w *= SmokeCloud.Transmittance(l.At, eye);
+                sum += w;
+            }
+            float full = Mathf.Max(0.1f, Config.FlashFullRange);
+            return Mathf.Clamp01(Mathf.Max(0f, Config.FlashReflection) * ReflectScale * full * full * sum);
+        }
+
+        /// <summary>
+        /// Diffuse light against the flash. With the default 10 m full range: a bang in a 4 m room,
+        /// facing the wall, comes to about full sight; the ground round a can in the open, seen
+        /// from 5 m, to about 0.1.
+        /// </summary>
+        private const float ReflectScale = 0.2f;
+
+        private static float Sq(float x) => x * x;
 
         /// <summary>
         /// Distance from the bang to the body's nearest limb, whether any limb is in its line of
@@ -505,7 +590,7 @@ namespace BombsAway
             float d = to.magnitude;
             var hits = Physics.RaycastAll(eye, to / Mathf.Max(0.01f, d), Mathf.Max(0f, d - 0.3f), Config.WorldLayerMask, QueryTriggerInteraction.Ignore);
             bool open = hits.Length == 0;
-            float sight = Sight(origin, eye, cam.transform.forward, open);
+            float sight = Sight(origin, eye, cam.transform.forward, open, out float reflected);
             float hearing = Falloff(d) * (open ? 1f : Config.FlashHearingOcclusion);
 
             if (sight >= 0.08f)
@@ -524,7 +609,7 @@ namespace BombsAway
             }
             CameraFX.AddKick(0.5f * hearing);
             if (hearing >= 0.15f) StartRing(hearing);
-            if (Config.Dbg1) MelonLogger.Msg($"[Flash] you at {d:F1} m: sight {sight:F2}, hearing {hearing:F2}");
+            if (Config.Dbg1) MelonLogger.Msg($"[Flash] you at {d:F1} m: sight {sight:F2} (off walls {reflected:F2}), hearing {hearing:F2}");
         }
 
         /// <summary>The blind's strength now: the peak through the hold, then easing out over the fade.</summary>

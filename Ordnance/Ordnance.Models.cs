@@ -94,10 +94,12 @@ namespace BombsAway
         /// The HE copy of a projectile's atlas on its (already copied) body material, so the
         /// stencil on it says what it carries. Painted by the model scripts next to the HEAT one.
         /// </summary>
-        internal static void PaintWarhead(Ordnance o, GameObject obj, bool he)
+        internal static void PaintWarhead(Ordnance o, GameObject obj, WarheadMode w)
         {
-            if (!he || obj == null) return;
-            var tex = Texture(PrefabName(o) + "_Albedo_HE");
+            if (w == WarheadMode.HEAT || obj == null) return;   // the prefab's own atlas
+            var tex = Texture(PrefabName(o) + "_Albedo_" + w);
+            // No TBX atlas in an older bundle: at least not the HEAT stencil.
+            if (tex == null && w == WarheadMode.TBX) tex = Texture(PrefabName(o) + "_Albedo_HE");
             var body = obj.transform.Find("Body");
             var r = body != null ? body.GetComponent<Renderer>() : null;
             if (tex != null && r != null && r.sharedMaterial != null) r.sharedMaterial.SetTexture("_BaseMap", tex);

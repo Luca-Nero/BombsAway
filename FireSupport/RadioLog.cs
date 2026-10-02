@@ -7,7 +7,7 @@ namespace BombsAway
     /// <summary>
     /// The fire-support net, bottom left: each transmission typed out at a DOS cursor, one after
     /// the other, with a squelch at the start of each. OBS is you, FDC the battery's fire
-    /// direction centre. Lines stay a while after the last one and then fade.
+    /// direction centre, MTR the mortar section. Lines stay a while after the last one and then fade.
     /// </summary>
     internal static class RadioLog
     {
@@ -31,6 +31,9 @@ namespace BombsAway
 
         /// <summary>The battery's fire direction centre.</summary>
         public static void Battery(string text) => Say("FDC", text, true);
+
+        /// <summary>A firing unit's station by its call sign (FDC for the 155 battery, MTR for the mortars).</summary>
+        public static void Unit(string who, string text) => Say(who, text, true);
 
         private static void Say(string who, string text, bool fdc) => _queue.Enqueue(new Line { Who = who, Text = text.ToUpperInvariant(), Fdc = fdc });
 
@@ -68,7 +71,7 @@ namespace BombsAway
             float alpha = 1f - Mathf.Clamp01((now - _lastDone - Linger) / FadeOut);
             if (alpha <= 0f && _queue.Count == 0) { _lines.Clear(); return; }
 
-            float px = Mathf.Max(2f, Mathf.Round(Screen.height / 480f));
+            float px = Mathf.Max(1.5f, Mathf.Round(Screen.height / 480f) * Mathf.Clamp(Config.RadioTextSize, 0.4f, 2f));
             float lineH = (PixelFont.GH + 4) * px;
             float x = Mathf.Round(Screen.width * 0.02f), w = 0f;
             foreach (var l in _lines) w = Mathf.Max(w, PixelFont.Width(l.Who + "> " + l.Text + "_", px));

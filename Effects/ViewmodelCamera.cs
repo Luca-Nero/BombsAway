@@ -39,7 +39,7 @@ namespace BombsAway
         /// <summary>Every frame while it is in use: the world camera's field of view may change.</summary>
         public static void Sync()
         {
-            if (_cam != null && _baseCam != null) _cam.fieldOfView = _baseCam.fieldOfView;
+            if (_cam != null && _baseCam != null) _cam.fieldOfView = BinocularView.RestFov(_baseCam);   // held models never zoom
         }
 
         private static void Ensure(Camera baseCam)
@@ -52,7 +52,7 @@ namespace BombsAway
             _cam = null;
             try
             {
-                int layer = FreeLayer();
+                int layer = FreeLayers.Take("Viewmodel");
                 if (layer < 0) { MelonLogger.Warning("[Viewmodel] no free layer; held models stay on the world camera."); return; }
                 var baseData = baseCam.GetComponent<UniversalAdditionalCameraData>();
                 if (baseData == null) { MelonLogger.Warning("[Viewmodel] the world camera has no URP data; held models stay on it."); return; }
@@ -79,13 +79,6 @@ namespace BombsAway
                 MelonLogger.Warning($"[Viewmodel] could not set up the overlay camera: {e.Message}");
                 _cam = null;
             }
-        }
-
-        private static int FreeLayer()
-        {
-            for (int i = 31; i >= 8; i--)
-                if (string.IsNullOrEmpty(LayerMask.LayerToName(i))) return i;
-            return -1;
         }
     }
 }

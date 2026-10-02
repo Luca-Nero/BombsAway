@@ -44,6 +44,7 @@
     <EmbeddedResource Include="Icons\Category.png" />
     <EmbeddedResource Include="Icons\Flash.png" />
     <EmbeddedResource Include="Icons\Smoke.png" />
+    <EmbeddedResource Include="Icons\Binoculars.png" />
   </ItemGroup>
 
   <!-- Deploy to every live FRUKT install under FruktBuildsRoot (any FRUKT.exe, at any depth, with

@@ -10,11 +10,16 @@ namespace BombsAway
         public float Ads;            // 0..1, the eyepieces' fade
         public bool Lasing;
         public float Progress;       // 0..1 toward a fix
+        public bool OffMark;         // the reticle has wandered off the lased point: the fill pauses
+        public Vector3 LasePoint;    // the point being lased
         public bool NoReturn;        // lasing at nothing
         public bool HasReading;      // a range to show (lasing now, or the last fix)
         public float Range, AzimuthMils, ElevationMils;
-        public string Mission;       // the mission type ("ARTY 155 HE")
+        public string Mission;       // the mission type ("155MM HE")
+        public string MissionLine;   // under the strip: "155MM HE  6 RDS"
+        public int MissionIndex;     // the chosen slot on the strip (FireMission.CodeAt)
         public int Rounds;
+        public float ZoomLevel;      // the chosen magnification (the screen shows "7X")
         public bool HasMark;
         public Vector3 Mark;
         public string MarkStatus;    // "MSN 01 SPLASH 07"
@@ -71,7 +76,8 @@ namespace BombsAway
             // Mission type, top; the readout, bottom.
             float fpx = px;
             float top = cy - H * 0.36f, bottom = cy + H * 0.30f;
-            PixelFont.DrawCentred($"{s.Mission}  {s.Rounds} RDS", cx, top, fpx, led);
+            DrawStrip(s, cx, top - (PixelFont.GH + 8) * fpx, fpx, led, dim);
+            PixelFont.DrawCentred(s.MissionLine ?? s.Mission, cx, top, fpx, led);
 
             string line;
             if (s.NoReturn) line = (Time.unscaledTime * 3f % 1f) < 0.6f ? "NO RETURN" : "";
@@ -86,14 +92,54 @@ namespace BombsAway
                 float segW = 4f * px, gap = px, total = Segs * segW + (Segs - 1) * gap;
                 float x0 = cx - total * 0.5f, y0 = bottom + (PixelFont.GH + 4) * fpx;
                 int lit = Mathf.FloorToInt(s.Progress * Segs);
+                bool blink = (Time.unscaledTime * 4f % 1f) < 0.6f;
                 for (int i = 0; i < Segs; i++)
-                    PixelFont.Box(x0 + i * (segW + gap), y0, segW, 2f * px, i < lit ? led : dim);
-                if ((Time.unscaledTime * 4f % 1f) < 0.6f) PixelFont.DrawCentred("LASING", cx, y0 + 4f * px, fpx, led);
+                    PixelFont.Box(x0 + i * (segW + gap), y0, segW, 2f * px, i < lit && (!s.OffMark || blink) ? led : dim);
+                if (s.OffMark) PixelFont.DrawCentred("ON TGT", cx, y0 + 4f * px, fpx, blink ? led : dim);
+                else if (blink) PixelFont.DrawCentred("LASING", cx, y0 + 4f * px, fpx, led);
+                Spot(cam, s.LasePoint, px, s.OffMark ? led : dim);
             }
             else if (s.MarkStatus != null)
                 PixelFont.DrawCentred(s.MarkStatus, cx, bottom + (PixelFont.GH + 4) * fpx, fpx, led);
 
             if (s.HasMark) Diamond(cam, s.Mark, px, led, cx, cy);
+        }
+
+        /// <summary>The mission strip, as on the screen (LrfDisplay): a slot per type, the chosen one solid.</summary>
+        private static void DrawStrip(in LrfState s, float cx, float y, float px, Color led, Color dim)
+        {
+            const int SlotW = 23, SlotH = 11, Gap = 2;
+            int n = FireMission.TypeCount;
+            float total = (n * SlotW + (n - 1) * Gap) * px, x0 = Mathf.Round(cx - total * 0.5f);
+            for (int i = 0; i < n; i++)
+            {
+                float x = x0 + i * (SlotW + Gap) * px;
+                string code = FireMission.CodeAt(i);
+                bool chosen = i == s.MissionIndex;
+                if (chosen) PixelFont.Box(x, y, SlotW * px, SlotH * px, led);
+                else Outline(x, y, SlotW * px, SlotH * px, px, dim);
+                PixelFont.DrawCentred(code, x + (SlotW * 0.5f + 0.5f) * px, y + 2f * px, px, chosen ? new Color(0.02f, 0.02f, 0.03f, led.a) : dim);
+                if (FireMission.Running(FireMission.TypeAt(i))) PixelFont.Box(x + (SlotW / 2 - 2) * px, y + (SlotH + 1) * px, 5f * px, px, led);
+            }
+            bool lit = Time.unscaledTime - FireMission.SwitchedAt < 0.25f;
+            PixelFont.DrawCentred(Config.MissionPrevKey.ToString(), x0 - 9f * px, y + 2f * px, px, lit && FireMission.SwitchedDir < 0 ? led : dim);
+            PixelFont.DrawCentred(Config.MissionNextKey.ToString(), x0 + total + 9f * px, y + 2f * px, px, lit && FireMission.SwitchedDir > 0 ? led : dim);
+        }
+
+        /// <summary>The point being lased: four LED corners round it, so the eye can bring the reticle back.</summary>
+        private static void Spot(Camera cam, Vector3 p, float px, Color c)
+        {
+            Vector3 sp = cam.WorldToScreenPoint(p);
+            if (sp.z <= 0f) return;
+            float x = Mathf.Round(sp.x), y = Mathf.Round(Screen.height - sp.y);
+            float r = 4f * px, l = 2f * px;
+            for (int sx = -1; sx <= 1; sx += 2)
+                for (int sy = -1; sy <= 1; sy += 2)
+                {
+                    float ex = x + sx * r, ey = y + sy * r;
+                    PixelFont.Box(sx < 0 ? ex : ex - l + px, ey - px * 0.5f, l, px, c);
+                    PixelFont.Box(ex - px * 0.5f, sy < 0 ? ey : ey - l + px, px, l, c);
+                }
         }
 
         /// <summary>The called target: a blinking diamond over it and its range.</summary>

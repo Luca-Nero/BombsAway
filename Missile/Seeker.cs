@@ -69,6 +69,10 @@ namespace BombsAway
         // where you look, or out of range. Once a missile is fired at it, the lock is pinned:
         // it holds, sight or no sight, until that missile is down (and then goes, unless
         // PersistentLock keeps it for another shot).
+        //
+        // Smoke: the DAY and NIGHT views can't see through it, the thermal ones can. In a day or
+        // night view a target behind smoke can't be tracked, and a lock not yet fired on is lost
+        // once smoke has hidden it for ObscuredGrace.
         // ══════════════════════════════════════════════════════════════════════════
 
         private static float _lockProgress;          // 0..1 toward a lock on the candidate
@@ -76,6 +80,24 @@ namespace BombsAway
         private static float _seekTick;                   // until the seeker's next tone
         private static TargetBody _candidateBody;    // whole-body mode: the candidate's body
         private static TargetBody _lockedBody;       // whole-body mode: the locked body
+        private static float _lockHiddenFor;              // seconds smoke has hidden the lock
+
+        private const float ObscuredGrace = 0.4f;
+
+        /// <summary>The CLU sees heat (WHOT / BHOT), so smoke doesn't hide anything from it.</summary>
+        private static bool CluThermal => _cluView == CluView.WHot || _cluView == CluView.BHot;
+
+        /// <summary>Smoke hides <paramref name="point"/> from <paramref name="eye"/> (for a day or night sight).</summary>
+        internal static bool SmokeHides(Vector3 eye, Vector3 point)
+            => SmokeCloud.Count > 0 && SmokeCloud.Transmittance(eye, point) < Config.SmokeLockClear;
+
+        /// <summary>Smoke hides <paramref name="point"/> from the CLU in its current view.</summary>
+        private static bool CluObscured(Vector3 point)
+        {
+            if (CluThermal || SmokeCloud.Count == 0) return false;
+            var cam = CameraCache.Main;
+            return cam != null && SmokeHides(cam.transform.position, point);
+        }
 
         private static void TickSeeker(float dt, bool seeking)
         {
@@ -85,6 +107,13 @@ namespace BombsAway
                 if (gone || (!LockPinned && Config.LockBreaks && !InView(LockedPoint(), Config.LockBreakAngle, 1.15f)))
                     BreakLock(gone ? "target gone" : "strayed");
             }
+            // Smoke between the CLU and a lock that has no missile on it yet: lost after a moment.
+            if (_lockedTarget != null && !LockPinned && seeking && CluObscured(LockedPoint()))
+            {
+                _lockHiddenFor += dt;
+                if (_lockHiddenFor >= ObscuredGrace) BreakLock("hidden by smoke");
+            }
+            else _lockHiddenFor = 0f;
 
             if (!seeking)
             {
@@ -98,6 +127,9 @@ namespace BombsAway
             // Keep the current candidate while it stays in the cone; otherwise take the scan's best.
             Rigidbody cand = _focusedTarget != null && InView(CandidatePoint(), Config.MissileLockAngle, 1f)
                 ? _focusedTarget : ScanForTarget();
+            // Whichever it is, smoke in front of it (day or night view) means nothing to track:
+            // checked every frame, as the scan's result is reused between scans.
+            if (cand != null && CluObscured(cand == _focusedTarget ? CandidatePoint() : cand.worldCenterOfMass)) cand = null;
 
             if (cand != null && _lockedTarget != null && SameTarget(cand, _lockedTarget))
             {
@@ -151,6 +183,7 @@ namespace BombsAway
             _lockedTarget = null;
             _lockedBody = null;
             _lockMissile = null;
+            _lockHiddenFor = 0f;
             HideLockIndicator();
         }
 

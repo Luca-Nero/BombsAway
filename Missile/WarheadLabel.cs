@@ -25,6 +25,8 @@ namespace BombsAway
             ['E'] = new[] { "111", "100", "110", "100", "111" },
             ['A'] = new[] { "010", "101", "111", "101", "101" },
             ['T'] = new[] { "111", "010", "010", "010", "010" },
+            ['B'] = new[] { "110", "101", "110", "101", "110" },
+            ['X'] = new[] { "101", "101", "010", "101", "101" },
         };
 
         // The stencil's hazard yellow (the atlas bytes), the HUD's cyan and the LED red.

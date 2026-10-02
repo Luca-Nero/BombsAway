@@ -267,7 +267,8 @@ namespace BombsAway
                 _scanDots.RemoveAt(bi);
 
                 if (rb == null || col == null) continue;  // destroyed while scanning
-                if (HasLineOfSight(camPos, rb, col)) return rb;
+                // Smoke hides it from the day and night sights; thermal sees through.
+                if (HasLineOfSight(camPos, rb, col) && !CluObscured(rb.worldCenterOfMass)) return rb;
             }
 
             return null;

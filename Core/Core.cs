@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.8.0";
+        public const string Version = "5.10.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -94,6 +94,7 @@ namespace BombsAway
             TickPlacement();
             TickHeld();
             Flashbang.Tick();
+            Thermobaric.Tick();
             Breeze.Tick();
             TickBinoculars(Time.deltaTime);
             FireMission.Tick();
@@ -127,11 +128,10 @@ namespace BombsAway
                     if (Input.GetKeyDown(Config.ReleaseLockKey) && _lockedTarget != null) BreakLock("released");
                 }
 
-                // HEAT <-> HE: the Javelin and the AT-4 share the warhead choice.
+                // HEAT -> HE -> TBX: the Javelin and the AT-4 share the warhead choice.
                 if ((Holding(Ordnance.Missile) || Holding(Ordnance.Rocket)) && Input.GetKeyDown(Config.WarheadModeKey))
                 {
-                    MissileWarheadMode = MissileWarheadMode == WarheadMode.HEAT
-                        ? WarheadMode.HE : WarheadMode.HEAT;
+                    MissileWarheadMode = (WarheadMode)(((int)MissileWarheadMode + 1) % 3);
                     if (Config.Dbg1) MelonLogger.Msg($"[Missile] Warhead: {MissileWarheadMode}");
                 }
                 // The smoke grenade's warhead key is its colour.

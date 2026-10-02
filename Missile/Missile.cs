@@ -45,9 +45,7 @@ namespace BombsAway
             if (cam == null) return null;
             var kind = rocket ? Ordnance.Rocket : Ordnance.Missile;
 
-            var ep = MissileWarheadMode == WarheadMode.HE
-                ? ExplosionParams.FromMissileHEConfig(Vector3.zero)
-                : ExplosionParams.FromMissileConfig(Vector3.zero);
+            var ep = ExplosionParams.ForWarhead(MissileWarheadMode);
 
             if (rocket)   // armed a few metres out, as it leaves at full speed
                 ep.ArmDelay = Config.RocketArmDistance / Mathf.Max(1f, Config.RocketSpeed);
@@ -70,7 +68,7 @@ namespace BombsAway
                 owned.AddRange(bundleMats);
                 if (rocket) rocketRig = RocketRig.Bind(obj.transform);
                 else        rig = MissileRig.Bind(obj.transform);
-                OrdnanceModels.PaintWarhead(kind, obj, MissileWarheadMode == WarheadMode.HE);   // its stencil says what it carries
+                OrdnanceModels.PaintWarhead(kind, obj, MissileWarheadMode);   // its stencil says what it carries
             }
             else if (mesh != null)
             {
@@ -223,6 +221,7 @@ namespace BombsAway
                 Rig = rig,
                 RocketRig = rocketRig,
                 Trail = rig != null ? trail : null,
+                Thermal = CluThermal,
             };
             _missiles.Add(state);
 
@@ -246,13 +245,26 @@ namespace BombsAway
             m.Timer += dt;
             TickMissileRig(m);
 
-            if (m.Body != null && m.Body.Alive)
-                m.LastKnownTargetPos = m.Body.Centre;   // whole body: its middle (top attack: its top, below)
+            // Where the target is now, if the seeker can see it: whole body, its middle (top
+            // attack: its top, below); else the limb.
+            Vector3 now = m.LastKnownTargetPos;
+            bool tracked = false;
+            if (m.Body != null && m.Body.Alive) { now = m.Body.Centre; tracked = true; }
             else if (m.TargetRb != null)
             {
-                try { m.LastKnownTargetPos = m.TargetRb.transform.position; }
+                try { now = m.TargetRb.transform.position; tracked = true; }
                 catch { m.TargetRb = null; }
             }
+            // A day or night seeker loses its target in smoke and flies on to where it last saw
+            // it, picking it up again once it is in sight. Checked ten times a second.
+            if (tracked && !m.Unguided && !m.Thermal && Time.time >= m.NextSightCheck)
+            {
+                m.NextSightCheck = Time.time + 0.1f;
+                bool was = m.Hidden;
+                m.Hidden = SmokeHides(m.Obj.transform.position, now);
+                if (m.Hidden != was && Config.Dbg1) MelonLogger.Msg($"[Missile] target {(m.Hidden ? "hidden by smoke: flying at its last seen point" : "in sight again")}");
+            }
+            if (tracked && !m.Hidden) m.LastKnownTargetPos = now;
 
             Vector3 pos = m.Obj.transform.position;
             Vector3 targetPos = m.LastKnownTargetPos;
@@ -511,7 +523,9 @@ namespace BombsAway
             m.Dead = true;
             m.Params.Origin = origin;
             m.Params.Forward = impactDir;
-            ExplosionSystem.Detonate(m.Params);
+            // A thermobaric warhead only disperses its fuel here; the cloud goes off a moment later.
+            if (m.Params.Kind == "MissileTBX") Thermobaric.Disperse(m.Params);
+            else ExplosionSystem.Detonate(m.Params);
         }
     }
 }

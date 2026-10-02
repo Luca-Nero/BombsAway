@@ -18,7 +18,7 @@ namespace BombsAway
             {
                 string atkMode = MissileAttackMode == AttackMode.Top ? "TOP ATTACK" : "DIRECT";
                 string lockMode = PersistentLock ? "PERSIST" : "STD";
-                string warhead = MissileWarheadMode == WarheadMode.HEAT ? "HEAT" : "HE";
+                string warhead = MissileWarheadMode.ToString();
                 p.Line($"{Config.AttackModeKey}/{Config.WarheadModeKey}/{Config.LockModeKey}  | MISSILE: {atkMode} | {warhead} | {lockMode}");
 
                 string view = _cluView switch { CluView.Night => "NIGHT", CluView.WHot => "WHOT", CluView.BHot => "BHOT", _ => "DAY" };
@@ -33,14 +33,15 @@ namespace BombsAway
                 p.Line($"{Config.WarheadModeKey} | SMOKE: {SmokeColourName}");
             else if (Equipped && Selected == Ordnance.Rocket)
             {
-                string warhead = MissileWarheadMode == WarheadMode.HEAT ? "HEAT" : "HE";
+                string warhead = MissileWarheadMode.ToString();
                 p.Line($"{Config.WarheadModeKey} | AT-4: {warhead}");
                 if (!RocketReady) p.Line("RELOADING", HudPanel.Warn);
             }
 
             else if (Equipped && Selected == Ordnance.Binoculars)
             {
-                p.Line($"{Config.WarheadModeKey} | BINOCULARS: {FireMission.TypeName} | {UnityEngine.Mathf.Clamp(Config.ArtyRounds, 1, 24)} RDS");
+                p.Line($"{Config.MissionPrevKey}/{Config.MissionNextKey} | MISSION: {FireMission.Describe}");
+                p.Line($"wheel | ZOOM: {BinocularView.Level:0.#}X");
                 if (FireMission.TryMark(out _, out string status)) p.Line(status, HudPanel.Warn);
             }
 

@@ -246,6 +246,15 @@ namespace BombsAway
                 _cam.clearFlags = thermal ? CameraClearFlags.SolidColor : CameraClearFlags.Skybox;
                 _cam.backgroundColor = Color.black;
             }
+            // Thermal sees through smoke: its layer is left out (checked every frame, as the
+            // smoke picks its layer when the first can lights).
+            int smoke = SmokeCloud.LayerBit;
+            if (smoke != 0)
+            {
+                bool hot = st.View == CluView.WHot || st.View == CluView.BHot;
+                int mask = hot ? _cam.cullingMask & ~smoke : _cam.cullingMask | smoke;
+                if (mask != _cam.cullingMask) _cam.cullingMask = mask;
+            }
 
             if (ads > 0.05f) _cam.enabled = true;
             else

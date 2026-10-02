@@ -62,7 +62,6 @@ namespace BombsAway
         {
             Ordnance.Missile => "Icons/Javelin.png",
             Ordnance.Rocket  => "Icons/AT4.png",
-            Ordnance.Binoculars => null,   // no model yet: a plain swatch
             _                => $"Icons/{o}.png",
         };
 
@@ -108,7 +107,7 @@ namespace BombsAway
                     Icon         = IconFor(o),
                     OnSelected   = item => OnOrdnanceSelected(o, item.Slot, item.Held),
                     OnScroll     = (item, notches) => OnOrdnanceScroll(o, notches),
-                    OnMiddle     = item => { if (o == Ordnance.Missile) OnOrdnanceScroll(o, _cluNfov ? -1f : 1f); },
+                    OnMiddle     = item => OnOrdnanceMiddle(o),
                     OnDeselected = item => OnOrdnanceDeselected(o, item.Slot),
                 }
                 .AddStat("use", OrdnanceUse[i]));
@@ -118,15 +117,34 @@ namespace BombsAway
         private static int _selectedSlot = -1;
         private static float _selectedAt;
 
-        /// <summary>Scroll up for the CLU's narrow field of view, down for the wide one (middle click toggles).</summary>
+        /// <summary>Scroll up for the CLU's narrow field of view, down for the wide one (middle click toggles).
+        /// The binoculars step their zoom levels the same way (middle click cycles them).</summary>
         private static void OnOrdnanceScroll(Ordnance o, float notches)
         {
-            if (o != Ordnance.Missile || notches == 0f) return;
+            if (notches == 0f) return;
+            if (o == Ordnance.Binoculars)
+            {
+                if (BinocularView.Step(notches > 0f ? 1 : -1)) BinoZoomChanged();
+                return;
+            }
+            if (o != Ordnance.Missile) return;
             bool nfov = notches > 0f;
             if (nfov == _cluNfov) return;
             _cluNfov = nfov;
             Sfx.PlayHeld("CluClick");
             if (Config.Dbg1) MelonLogger.Msg($"[CLU] {(nfov ? "NFOV" : "WFOV")}");
+        }
+
+        private static void OnOrdnanceMiddle(Ordnance o)
+        {
+            if (o == Ordnance.Missile) OnOrdnanceScroll(o, _cluNfov ? -1f : 1f);
+            else if (o == Ordnance.Binoculars && BinocularView.Cycle()) BinoZoomChanged();
+        }
+
+        private static void BinoZoomChanged()
+        {
+            Sfx.PlayHeld("CluClick");
+            if (Config.Dbg1) MelonLogger.Msg($"[Binoculars] zoom x{BinocularView.Level:0.#}");
         }
 
         private static void ToggleAttackMode()
@@ -228,6 +246,7 @@ namespace BombsAway
             _grenades.Clear();
             _missiles.Clear();
             FireMission.Clear();
+            Thermobaric.Clear();
             ClearPending();
             ClearLooseParts();
         }

@@ -41,6 +41,10 @@ namespace BombsAway
         // Blasts and rockets push the smoke: a hole that closes again (SmokeCloud.Blast, Wake).
         public static float SmokeBlastClear = 3f;      // metres of hole per cube root of a kilo of TNT (0 = smoke ignores blasts)
         public static float SmokeRefill = 1f;          // how long holes take to close, x (2.5 s + 1 s per metre)
+        // Smoke hides things (SmokeCloud.Transmittance): the Javelin's DAY / NIGHT views can't
+        // lock through it (WHOT / BHOT can), and it shields eyes from a flashbang.
+        [FruitLib.MenuCategory("Smoke")] public static bool SmokeBlocksSight = true;
+        public static float SmokeLockClear = 0.35f;    // share of the view a day or night sight needs clear of smoke to track
 
         // ── Flashbang ─────────────────────────────────────────────────────────────
         // Two senses (Flashbang.cs). Sight: full within FlashFullRange, inverse square beyond,
@@ -67,6 +71,10 @@ namespace BombsAway
         public static float FlashMinStrength = 0.05f;       // below this a body is left alone
         public static bool FlashCoverOnRig = true;          // hands placed against the IK rig's head (off: the physical head, as in 5.6.3)
         public static float FlashCloseRange = 3f;           // metres: a body this near is blinded whichever way it faces, if the bang can see its head
+        // Light off walls (Flashbang.Reflected): a bang in a room blinds whichever way you face.
+        [FruitLib.MenuCategory("Flashbang")] public static float FlashReflection = 1f;
+        public static int FlashReflectRays = 64;            // rays from the bang that find the lit surfaces
+        public static float FlashReflectRange = 12f;        // metres: surfaces further than this aren't lit enough to count
         // The player: one switch for the blind, the ringing and the kick (off: you only hear the
         // bang). Replaces FlashBlindPlayer / FlashDeafenPlayer (5.6.1) and FlashPlayerEffect (5.6.0).
         [FruitLib.MenuCategory("Flashbang")] public static bool FlashPlayer = true;
@@ -152,11 +160,32 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragPower = 3000;
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEChargeKgTNT = 3f;
 
+        // ── Missile TBX (thermobaric) warhead ─────────────────────────────────────
+        // Two stages (Missile/Thermobaric.cs): at impact a small charge spreads a fuel cloud
+        // (no damage); MissileTBXIgniteDelay later it goes off - all blast, no fragments, a
+        // wide wave that fills rooms and reaches round cover (MissileTBXDiffraction) - and
+        // MissileTBXSuctionDelay after that the air rushes back in, pulling loose things and
+        // bodies toward the middle (MissileTBXSuction).
+        [FruitLib.MenuCategory("Missile TBX")] public static float MissileTBXChargeKgTNT = 4.5f;
+        [FruitLib.MenuCategory("Missile TBX")] public static float MissileTBXDamageScale = 1.2f;
+        [FruitLib.MenuCategory("Missile TBX")] public static float MissileTBXIgniteDelay = 0.15f;
+        [FruitLib.MenuCategory("Missile TBX")] public static float MissileTBXSuction = 4f;
+        public static float MissileTBXSuctionDelay = 0.3f;     // seconds after ignition the air rushes back
+        public static float MissileTBXSuctionRadius = 14f;     // metres it reaches
+        public static float MissileTBXDiffraction = 0.6f;      // what reaches something behind full cover (other charges 0.15)
+        public static float MissileTBXCloudLift = 0.6f;        // metres back from the impact the cloud's middle is
+        public static float MissileTBXBlastRadius = 9f;        // the old-model fallbacks (no charge)
+        public static float MissileTBXBlastForce = 6f;
+        public static float MissileTBXBlastUpward = 1.5f;
+        public static float MissileTBXOverpressureRadius = 16f;
+        public static int MissileTBXOverpressureWoundPoints = 30;
+
         // ── Fire support (binoculars) ─────────────────────────────────────────────
-        // The binoculars (FireSupport/): right mouse to look (BinoZoom), hold left mouse on a
-        // target for LaseTime to fix it and call a mission. A 155 mm battery answers on the radio;
-        // ArtyRounds shells land round the mark (ArtyDispersion) ArtyShotDelay + ArtyFlightTime later.
-        [FruitLib.MenuCategory("Fire Support")] public static float BinoZoom = 7f;
+        // The binoculars (FireSupport/): right mouse to look, the wheel steps the zoom through
+        // BinoZoomLevels, hold left mouse on a target for LaseTime to fix it and call a mission.
+        // A 155 mm battery answers on the radio; ArtyRounds shells land round the mark
+        // (ArtyDispersion) ArtyShotDelay + ArtyFlightTime later.
+        public static string BinoZoomLevels = "3, 7, 14";   // replaces BinoZoom (5.8.3): the wheel steps through these
         [FruitLib.MenuCategory("Fire Support")] public static float LaseTime = 3f;
         [FruitLib.MenuCategory("Fire Support")] public static int ArtyRounds = 6;
         [FruitLib.MenuCategory("Fire Support")] public static float ArtyDispersion = 10f;
@@ -168,13 +197,17 @@ namespace BombsAway
         public static float BinoAdsTime = 0.25f;
         public static float BinoSensitivity = 1f;
         public static float LaseRange = 1500f;
-        public static float LaseTolerance = 0.03f;
+        public static float LaseHoldMils = 10f;
+        public static float LaseGrace = 0.6f;
         public static float ArtyShotDelay = 4f;
         public static float ArtySplashWarning = 5f;
         public static float ArtyVolleySpread = 3f;
         public static float ArtyDescentAngle = 65f;
-        public static float ArtyShellSpeed = 300f;
-        public static float ArtyWhistleLead = 1.8f;
+        // Renamed in 5.8.4 (were ArtyShellSpeed 300, ArtyWhistleTime 3.4): the whistle now rides
+        // the shell, and at 300 m/s a shell nearly keeps up with its own sound, so its whistle
+        // piled up into about a second.
+        public static float ArtyTerminalSpeed = 160f;
+        public static float ArtyWhistleFlight = 7f;
         public static float ArtyBatteryHeading = -1f;
         public static float ArtyDangerClose = 60f;
         public static bool ArtyStacking = false;
@@ -188,6 +221,50 @@ namespace BombsAway
         public static float ArtyFragMaxTime = 4f;
         public static float ArtyFragImpulse = 0.2f;
         public static float RadioTypeRate = 40f;
+        public static float RadioTextSize = 0.85f;
+
+        // The other missions (5.9.0), picked with Q / E while the binoculars are up. The 81 mm
+        // mortars are their own unit (their own bearing, one mission of their own at a time);
+        // smoke, illumination and precision are the 155 battery's, and share its shot delay,
+        // splash warning and stacking rule.
+        [FruitLib.MenuCategory("Fire Support")] public static int MortarRounds = 8;
+        [FruitLib.MenuCategory("Fire Support")] public static int SmokeShellRounds = 4;
+        [FruitLib.MenuCategory("Fire Support")] public static int IllumRounds = 3;
+        public static float MortarDispersion = 16f;
+        public static float MortarFlightTime = 7f;
+        public static float MortarVolleySpread = 6f;
+        public static float MortarDescentAngle = 78f;
+        public static float MortarTerminalSpeed = 120f;
+        public static float MortarBatteryHeading = -1f;
+        public static float MortarChargeKgTNT = 0.95f;
+        public static float MortarDamageScale = 1.2f;
+        public static int MortarFragRayCount = 1200;
+        public static int MortarFragPower = 2500;
+        public static float MortarBlastRadius = 7f;
+        public static float MortarBlastForce = 4f;
+        public static float MortarBlastUpward = 1.5f;
+        public static float MortarOverpressureRadius = 10f;
+        public static int MortarOverpressureWoundPoints = 14;
+        public static float MortarFragSpeed = 30f;
+        public static float MortarFragMaxTime = 3f;
+        public static float MortarFragImpulse = 0.15f;
+        public static float SmokeShellDispersion = 22f;
+        public static float SmokeShellVolleySpread = 4f;
+        public static float SmokeShellBurnTime = 50f;
+        public static float SmokeShellRate = 22f;
+        public static float IllumDispersion = 35f;
+        public static float IllumVolleySpread = 10f;
+        public static float IllumBurstHeight = 90f;
+        public static float IllumBurnTime = 50f;
+        public static float IllumFallSpeed = 1.6f;
+        public static float IllumWindScale = 3f;
+        public static float IllumLightRange = 140f;
+        public static float IllumLightIntensity = 5000f;   // URP falls off as 1/d^2: ~0.6 on the ground from 90 m
+        public static int PrecisionRounds = 1;
+        public static float PrecisionDispersion = 1f;
+        public static float PrecisionFlightTime = 14f;
+        public static float PrecisionDescentAngle = 84f;
+        public static float PrecisionTerminalSpeed = 200f;
 
         // ── Detonation ────────────────────────────────────────────────────────────
         // Shooting a live charge sets it off; an explosion sets off charges its fragments reach
@@ -312,6 +389,17 @@ namespace BombsAway
         public static float AT4CarryRoll = -10f;
         public static float AT4EyeRelief = 0.13f;
         public static float AT4SpentDelay = 0.4f;
+        // Binoculars in the hand (posed with Assets/FRUKT/_Kit/fpview.py): low right, the screen
+        // toward you. Brought up (on the viewmodel camera), the screen comes to the middle of the
+        // view at BinoScreenFraction of its height, like the Javelin's CLU. (Keys renamed from
+        // BinoHold*: the root moved from the eyecups to the screen's centre.)
+        public static float BinoHipOffsetX = 0.0653f;
+        public static float BinoHipOffsetY = 0.0198f;
+        public static float BinoHipOffsetZ = -0.0779f;
+        public static float BinoHipPitch = 12f;
+        public static float BinoHipYaw = -14f;
+        public static float BinoHipRoll = 8f;
+        public static float BinoScreenFraction = 0.75f;
         // Making a fresh tube ready (Ordnance.AT4.cs): pin, cocking lever, safety; the backblast's shake.
         public static float AT4PinTime = 0.2f;
         public static float AT4CockTime = 0.3f;
@@ -374,6 +462,8 @@ namespace BombsAway
         [FruitLib.MenuCategory("Controls")] public static KeyCode LockModeKey = KeyCode.F4;
         [FruitLib.MenuCategory("Controls")] public static KeyCode ReleaseLockKey = KeyCode.B;
         [FruitLib.MenuCategory("Controls")] public static KeyCode PlaceRotateKey = KeyCode.R;
+        [FruitLib.MenuCategory("Controls")] public static KeyCode MissionPrevKey = KeyCode.Q;
+        [FruitLib.MenuCategory("Controls")] public static KeyCode MissionNextKey = KeyCode.E;
 
         // ── Debug ─────────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Debug")] public static int DebugLevel = 0;
