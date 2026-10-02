@@ -38,6 +38,7 @@ namespace BombsAway
         {
             Ordnance.Missile => "JavelinLauncher",
             Ordnance.Rocket  => "AT4Launcher",
+            Ordnance.Binoculars => "Binoculars",
             _                => PrefabName(o),
         };
 

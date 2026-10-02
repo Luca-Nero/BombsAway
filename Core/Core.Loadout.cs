@@ -7,7 +7,7 @@ namespace BombsAway
 {
     // Missile is the Javelin (the name stays: it is the item id in saved toolbars); Rocket the AT-4.
     // Appended, never reordered: the names are item ids in saved toolbars.
-    public enum Ordnance { Grenade, C4, Claymore, Missile, Rocket, Smoke, Flash }
+    public enum Ordnance { Grenade, C4, Claymore, Missile, Rocket, Smoke, Flash, Binoculars }
 
     // ══════════════════════════════════════════════════════════════════════════════
     // One inventory item per ordnance type, on the mod's own "Bombs Away" shelf. LMB launches.
@@ -17,7 +17,7 @@ namespace BombsAway
 
     public partial class Core
     {
-        private static readonly string[] OrdnanceLabels = { "Grenade", "C4", "Claymore", "Javelin", "AT-4", "Smoke", "Flashbang" };
+        private static readonly string[] OrdnanceLabels = { "Grenade", "C4", "Claymore", "Javelin", "AT-4", "Smoke", "Flashbang", "Binoculars" };
         private static readonly Color[] OrdnanceColours =
         {
             new Color(0.29f, 0.33f, 0.13f),   // army green
@@ -27,6 +27,7 @@ namespace BombsAway
             new Color(0.82f, 0.59f, 0.00f),   // hazard yellow
             new Color(0.22f, 0.23f, 0.17f),   // olive drab can
             new Color(0.47f, 0.48f, 0.50f),   // steel
+            new Color(0.17f, 0.17f, 0.18f),   // charcoal
         };
 
         /// <summary>Thrown or set down with the pin-and-spoon sequence: the frag, smoke and flash grenades.</summary>
@@ -34,6 +35,9 @@ namespace BombsAway
 
         /// <summary>A launcher: fires rather than throws, and is never placed.</summary>
         private static bool IsLauncher(Ordnance o) => o == Ordnance.Missile || o == Ordnance.Rocket;
+
+        /// <summary>Not a weapon at all: never thrown, placed or fired (the binoculars).</summary>
+        private static bool IsTool(Ordnance o) => o == Ordnance.Binoculars;
 
         public static Ordnance Selected = Ordnance.Grenade;
         public static bool     Equipped;
@@ -48,8 +52,9 @@ namespace BombsAway
             "Unguided anti-tank rocket. Left click fires where it points.",
             "Smoke grenade. Burns for a while and hides what is behind it. Its warhead key changes the colour.",
             "Stun grenade. A blinding bang: everyone near it loses their footing for a few seconds.",
+            "Laser rangefinder binoculars. Right mouse to look; hold left mouse on a target to lase it and call in a fire mission.",
         };
-        private static readonly string[] OrdnanceUse = { "throw / place", "stick / detonate", "place", "lock-on launch", "point and shoot", "throw / place", "throw / place" };
+        private static readonly string[] OrdnanceUse = { "throw / place", "stick / detonate", "place", "lock-on launch", "point and shoot", "throw / place", "throw / place", "lase / call fire" };
         private static readonly Sprite[] _icons = new Sprite[OrdnanceLabels.Length];
 
         /// <summary>The embedded icon, rendered isometric from the bundled model (Assets/FRUKT); null for a placeholder.</summary>
@@ -57,6 +62,7 @@ namespace BombsAway
         {
             Ordnance.Missile => "Icons/Javelin.png",
             Ordnance.Rocket  => "Icons/AT4.png",
+            Ordnance.Binoculars => null,   // no model yet: a plain swatch
             _                => $"Icons/{o}.png",
         };
 
@@ -178,6 +184,9 @@ namespace BombsAway
             ViewmodelCamera.Reset();
             ResetChargesForScene();
             ResetPlacementForScene();
+            BinocularView.OnScene();
+            FireMission.OnScene();
+            RadioLog.Clear();
             _rocketReadyAt = 0f;
         }
 
@@ -218,6 +227,7 @@ namespace BombsAway
             }
             _grenades.Clear();
             _missiles.Clear();
+            FireMission.Clear();
             ClearPending();
             ClearLooseParts();
         }

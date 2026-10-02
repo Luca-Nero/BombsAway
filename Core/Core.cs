@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.7.0";
+        public const string Version = "5.8.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -95,6 +95,9 @@ namespace BombsAway
             TickHeld();
             Flashbang.Tick();
             Breeze.Tick();
+            TickBinoculars(Time.deltaTime);
+            FireMission.Tick();
+            RadioLog.Tick();
 
             if (!FruitMenu.IsInputSuppressed)
             {
@@ -212,6 +215,8 @@ namespace BombsAway
             {
                 var m = _missiles[i];
                 if (m.Dead) { _missiles.RemoveAt(i); continue; }
+                Vector3 wakeFrom = m.Obj != null ? m.Obj.transform.position : Vector3.zero;
+                bool wasFlying = m.Obj != null;
                 try { TickMissile(m, dt); }
                 catch (System.Exception e)
                 {
@@ -220,6 +225,17 @@ namespace BombsAway
                     ReleaseMaterials(m.Owned);
                     m.Obj = null;
                     m.Dead = true;
+                }
+                // Its wake through smoke: a tunnel, wider behind a burning motor.
+                if (wasFlying)
+                {
+                    Vector3 wakeTo = m.Obj != null ? m.Obj.transform.position : m.Params != null ? m.Params.Origin : wakeFrom;
+                    bool motor = !m.Unguided && m.Phase >= 1 && m.MotorTime < Config.MissileFlightMotorTime;
+                    if ((wakeTo - wakeFrom).sqrMagnitude < 60f * 60f)
+                    {
+                        try { SmokeCloud.Wake(wakeFrom, wakeTo, motor ? 1.3f : 1f, motor ? 6f : 4f); }
+                        catch (System.Exception e) { MelonLogger.Warning($"[Smoke] wake failed: {e.Message}"); }
+                    }
                 }
                 if (m.Dead) _missiles.RemoveAt(i);
             }
@@ -282,6 +298,7 @@ namespace BombsAway
         public override void OnGUI()
         {
             if (!_active) return;
+            DrawFireSupport();
             Flashbang.DrawOverlay();
             Flashbang.DrawDiagnostics();
         }

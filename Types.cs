@@ -390,5 +390,43 @@ namespace BombsAway
             };
         }
 
+        /// <summary>
+        /// A 155 mm HE shell (M795: about 10.8 kg of TNT in a thick steel body, ~6.6 kg TNT
+        /// equivalent of blast), point-detonating where it lands (FireSupport/FireMission.cs).
+        /// </summary>
+        public static ExplosionParams FromArtilleryConfig(Vector3 origin)
+        {
+            return new ExplosionParams
+            {
+                Kind = "Arty155",
+                FragPower = Config.ArtyFragPower,
+                ChargeKgTNT = Config.ArtyChargeKgTNT,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.up,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = Config.ArtyBlastRadius,
+                BlastForce = Config.ArtyBlastForce,
+                BlastUpward = Config.ArtyBlastUpward,
+
+                OverpressureRadius = Config.ArtyOverpressureRadius,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = Config.ArtyOverpressureWoundPoints,
+
+                FragRayCount = Config.ArtyFragRayCount,
+                FragSpeed = Config.ArtyFragSpeed,
+                FragMaxTime = Config.ArtyFragMaxTime,
+                FragImpulse = Config.ArtyFragImpulse,
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = Config.DebrisRaysRatio,
+                DamageScale = Config.ArtyDamageScale,
+            };
+        }
+
     }
 }

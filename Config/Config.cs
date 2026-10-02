@@ -31,18 +31,16 @@ namespace BombsAway
         /// <summary>Emission scale: below 1 for a thinner (cheaper) cloud.</summary>
         [FruitLib.MenuCategory("Smoke")] public static float SmokeDensity = 1f;
         public static float SmokeCanisterLife = 20f;   // seconds the spent can lies there after the smoke
-        // The cloud (SmokeCloud.cs): smoke spreads over the ground like a heavy gas, in columns
-        // SmokeCellSize across, keeping a front about SmokeFrontDepth deep, and drifts with the wind.
+        // The smoke (SmokeCloud.cs, SmokePlume.cs): a plume that rises while warm, bends and drifts
+        // with the wind, thins as it spreads, and is drawn as one faceted volume.
+        /// <summary>Thin smoke drawn as see-through haze round the solid smoke.</summary>
+        [FruitLib.MenuCategory("Smoke")] public static bool SmokeHaze = false;
         /// <summary>The breeze, metres per second (0 = still air). Its heading wanders slowly.</summary>
         [FruitLib.MenuCategory("Smoke")] public static float WindSpeed = 0.4f;
         public static float WindHeading = -1f;         // degrees from +Z the wind blows toward; -1 = random per scene
-        public static float SmokeVolume = 4.5f;        // m^3 of smoke a can puts out per second (x SmokeDensity)
-        public static float SmokeSpread = 0.35f;       // how readily deep smoke flows into shallower ground, per second
-        public static float SmokeFrontDepth = 1f;      // metres: thinner than this, smoke stops spreading (wind still moves it)
-        public static float SmokeFadeBurning = 0.01f;  // share of the smoke lost per second while the can burns
-        public static float SmokeClearRate = 0.06f;    // the same once it is out: the cloud clears over ~25 s
-        public static float SmokeCellSize = 1.25f;
-        public static int SmokeMaxCells = 350;         // ground columns per cloud
+        // Blasts and rockets push the smoke: a hole that closes again (SmokeCloud.Blast, Wake).
+        public static float SmokeBlastClear = 3f;      // metres of hole per cube root of a kilo of TNT (0 = smoke ignores blasts)
+        public static float SmokeRefill = 1f;          // how long holes take to close, x (2.5 s + 1 s per metre)
 
         // ── Flashbang ─────────────────────────────────────────────────────────────
         // Two senses (Flashbang.cs). Sight: full within FlashFullRange, inverse square beyond,
@@ -153,6 +151,43 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEDamageScale = 1.25f;
         [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragPower = 3000;
         [FruitLib.MenuCategory("Missile HE")] public static float MissileHEChargeKgTNT = 3f;
+
+        // ── Fire support (binoculars) ─────────────────────────────────────────────
+        // The binoculars (FireSupport/): right mouse to look (BinoZoom), hold left mouse on a
+        // target for LaseTime to fix it and call a mission. A 155 mm battery answers on the radio;
+        // ArtyRounds shells land round the mark (ArtyDispersion) ArtyShotDelay + ArtyFlightTime later.
+        [FruitLib.MenuCategory("Fire Support")] public static float BinoZoom = 7f;
+        [FruitLib.MenuCategory("Fire Support")] public static float LaseTime = 3f;
+        [FruitLib.MenuCategory("Fire Support")] public static int ArtyRounds = 6;
+        [FruitLib.MenuCategory("Fire Support")] public static float ArtyDispersion = 10f;
+        [FruitLib.MenuCategory("Fire Support")] public static float ArtyFlightTime = 10f;
+        [FruitLib.MenuCategory("Fire Support")] public static float ArtyChargeKgTNT = 6.6f;
+        [FruitLib.MenuCategory("Fire Support")] public static float ArtyDamageScale = 1.5f;
+        [FruitLib.MenuCategory("Fire Support")] public static int ArtyFragRayCount = 2500;
+        [FruitLib.MenuCategory("Fire Support")] public static int ArtyFragPower = 3500;
+        public static float BinoAdsTime = 0.25f;
+        public static float BinoSensitivity = 1f;
+        public static float LaseRange = 1500f;
+        public static float LaseTolerance = 0.03f;
+        public static float ArtyShotDelay = 4f;
+        public static float ArtySplashWarning = 5f;
+        public static float ArtyVolleySpread = 3f;
+        public static float ArtyDescentAngle = 65f;
+        public static float ArtyShellSpeed = 300f;
+        public static float ArtyWhistleLead = 1.8f;
+        public static float ArtyBatteryHeading = -1f;
+        public static float ArtyDangerClose = 60f;
+        public static bool ArtyStacking = false;
+        public static float ArtyBurstLift = 0.3f;
+        public static float ArtyBlastRadius = 12f;
+        public static float ArtyBlastForce = 6f;
+        public static float ArtyBlastUpward = 2f;
+        public static float ArtyOverpressureRadius = 20f;
+        public static int ArtyOverpressureWoundPoints = 24;
+        public static float ArtyFragSpeed = 30f;
+        public static float ArtyFragMaxTime = 4f;
+        public static float ArtyFragImpulse = 0.2f;
+        public static float RadioTypeRate = 40f;
 
         // ── Detonation ────────────────────────────────────────────────────────────
         // Shooting a live charge sets it off; an explosion sets off charges its fragments reach

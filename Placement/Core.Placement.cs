@@ -64,7 +64,7 @@ namespace BombsAway
         /// <summary>This placement's random yaw, rolled after each one so the hologram shows it.</summary>
         private static float _placeJitter;
 
-        private static bool Placeable(Ordnance o) => !IsLauncher(o);
+        private static bool Placeable(Ordnance o) => !IsLauncher(o) && !IsTool(o);
 
         /// <summary>Every frame, before TickLoadout, so a click uses this frame's target.</summary>
         private static void TickPlacement()

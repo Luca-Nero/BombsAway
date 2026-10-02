@@ -38,6 +38,12 @@ namespace BombsAway
                 if (!RocketReady) p.Line("RELOADING", HudPanel.Warn);
             }
 
+            else if (Equipped && Selected == Ordnance.Binoculars)
+            {
+                p.Line($"{Config.WarheadModeKey} | BINOCULARS: {FireMission.TypeName} | {UnityEngine.Mathf.Clamp(Config.ArtyRounds, 1, 24)} RDS");
+                if (FireMission.TryMark(out _, out string status)) p.Line(status, HudPanel.Warn);
+            }
+
             if (Config.Dbg1 && Flashbang.Count > 0) p.Line($"FLASH:   {Flashbang.Count} STUNNED", HudPanel.Warn);
 
             if (Config.Dbg1)

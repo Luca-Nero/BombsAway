@@ -45,6 +45,7 @@ namespace BombsAway
                 SpecFor(ExplosionParams.FromClaymoreConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromMissileConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromMissileHEConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromArtilleryConfig(Vector3.zero));
             }
             catch (System.Exception e) { MelonLogger.Warning($"[Explosion] pre-registering specs failed: {e.Message}"); }
         }
@@ -132,6 +133,7 @@ namespace BombsAway
                 case "Claymore":  return 0.7f;
                 case "C4":        return 4f;
                 case "MissileHE": return 1.5f;
+                case "Arty155":   return 3f;     // a thick forged body: heavier, slower pieces
                 default:          return 2f;
             }
         }
@@ -142,13 +144,22 @@ namespace BombsAway
 
         private static void OnExploded(ExplosionInfo x)
         {
+            // Any explosion pushes smoke, whoever's it is.
+            if (x.Spec != null)
+            {
+                try { SmokeCloud.Blast(x.Origin, x.Forward, x.Spec.ChargeKgTNT, x.Spec.BlastRadius, x.Spec.HSpreadDeg < 150f); }
+                catch (System.Exception e) { MelonLogger.Warning($"[Smoke] blast failed: {e.Message}"); }
+            }
+
             if (!Ours(x.Spec)) return;
 
             if (Config.CamFXEnabled) CameraFX.AddTrauma(x.Origin);
 
             // The bundle's effect for this kind (ExplosionFx), or the old code-built one.
             string kind = x.Spec.Id.Substring(SpecPrefix.Length);
-            if (!ExplosionFx.Play(kind, x.Origin, x.Forward, x.HasGround, x.Ground))
+            // A kind without its own effect yet borrows the nearest one (the shell: the HE warhead's).
+            if (!ExplosionFx.Play(kind, x.Origin, x.Forward, x.HasGround, x.Ground)
+                && !(kind == "Arty155" && ExplosionFx.Play("MissileHE", x.Origin, x.Forward, x.HasGround, x.Ground)))
             {
                 if (x.HasGround) ExplosionVFX.Spawn(x.Origin, x.Ground);
                 else             ExplosionVFX.SpawnAerial(x.Origin);

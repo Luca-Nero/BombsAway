@@ -51,10 +51,10 @@ namespace BombsAway
         }
 
         /// <summary>At the ear: things in the hand.</summary>
-        public static AudioSource PlayHeld(string key, float volume = 1f)
+        public static AudioSource PlayHeld(string key, float volume = 1f, float delay = 0f)
         {
             var cam = Camera.main;
-            return cam != null ? Play(key, cam.transform.position, cam.transform, volume) : null;
+            return cam != null ? Play(key, cam.transform.position, cam.transform, volume, delay) : null;
         }
 
         /// <summary>A source already in the world (an explosion's), played from here after <paramref name="delay"/>.</summary>

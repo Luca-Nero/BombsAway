@@ -12,7 +12,10 @@ namespace BombsAway
     {
         private static float _trauma = 0f;
         private static float _shakeTime = 0f;
-        private static float _baseFOV = -1f;
+        private static float _baseFOV = -1f;   // the unzoomed field of view (BinocularView divides it by its zoom)
+
+        /// <summary>A shake is running (it moves the camera's field of view).</summary>
+        public static bool Shaking => _trauma > 0f;
 
         private static UnityEngine.Rendering.Universal.ChromaticAberration _chroma;
         private static UnityEngine.Rendering.Universal.Vignette _vignette;
@@ -46,7 +49,7 @@ namespace BombsAway
 
             if (_trauma <= 0f)
             {
-                _baseFOV = cam.fieldOfView;
+                _baseFOV = BinocularView.RestFov(cam);
                 if (Config.Dbg2) MelonLogger.Msg($"[CAM] first hit — stored baseFOV={_baseFOV:F2}");
             }
 
@@ -74,7 +77,7 @@ namespace BombsAway
                 if (_trauma < 0.001f)
                 {
                     if (Config.Dbg2) MelonLogger.Msg($"[CAM] shake done — restore FOV={_baseFOV:F2}");
-                    if (_baseFOV > 0f) cam.fieldOfView = _baseFOV;
+                    if (_baseFOV > 0f) cam.fieldOfView = _baseFOV / BinocularView.Magnification;
                     _trauma = 0f;
                     return;
                 }
@@ -105,7 +108,9 @@ namespace BombsAway
                 cam.transform.position += offset;
                 cam.transform.Rotate(euler, Space.Self);
 
-                float targetFOV = (_baseFOV > 0f ? _baseFOV : fovBefore) - shake * 15f;
+                // Through the binoculars the punch is in their scale, not the naked eye's.
+                float zoom = BinocularView.Magnification;
+                float targetFOV = ((_baseFOV > 0f ? _baseFOV : fovBefore * zoom) - shake * 15f) / zoom;
                 cam.fieldOfView = Mathf.Lerp(fovBefore, targetFOV, 0.4f);
 
                 if (_shakeTime < 0.2f)
