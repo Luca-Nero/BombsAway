@@ -23,7 +23,8 @@ namespace BombsAway
         private static float _baseChroma = 0f;
         private static float _baseVignette = 0f;
 
-        public static void AddTrauma(Vector3 blastOrigin)
+        /// <param name="reach">Scales how far off a blast still shakes (a big bomb's reaches far).</param>
+        public static void AddTrauma(Vector3 blastOrigin, float scale = 1f, float reach = 1f)
         {
             if (!Config.CamFXActive) return;
 
@@ -32,8 +33,8 @@ namespace BombsAway
             if (Config.Dbg2) MelonLogger.Msg($"[CAM] cam='{cam.name}' pos={cam.transform.position} FOV={cam.fieldOfView:F2}");
 
             float dist = Vector3.Distance(cam.transform.position, blastOrigin);
-            float falloff = 1f - Mathf.Clamp01(dist / Config.CamFX(20f));
-            float trauma = Config.CamFX(10f) * falloff * falloff;
+            float falloff = 1f - Mathf.Clamp01(dist / Mathf.Max(0.01f, Config.CamFX(20f) * Mathf.Max(0.1f, reach)));
+            float trauma = Config.CamFX(10f) * falloff * falloff * scale;
             if (Config.Dbg2) MelonLogger.Msg($"[CAM] dist={dist:F2} falloff={falloff:F3} trauma={trauma:F3}");
 
             if (trauma < 0.01f) { if (Config.Dbg2) MelonLogger.Msg("[CAM] trauma < threshold, skip"); return; }

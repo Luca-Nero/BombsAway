@@ -26,7 +26,8 @@ namespace BombsAway
         public const int FeedW = 640, FeedH = 480;                // camera feed resolution
         private const int Border = 4, Corner = 10;                // the black frame round the picture
         private const float IdleHz = 15f;                         // camera refresh while not at the eye
-        private const int SlotW = 23, SlotH = 11, SlotGap = 2, StripY = 9;   // the mission strip
+        private const int SlotH = 11, StripY = 16;  // the mission strip (slot widths: FireMission.SlotWidths)
+        private const int TabY = 5, TabGap = 8;                   // the pages' names over it
         private const float TypeRate = 45f;                       // characters a second as the name retypes
         private const float KeyFlash = 0.25f;                     // seconds Q or E stays lit after a press
 
@@ -158,6 +159,7 @@ namespace BombsAway
             if (_cam == null) return;
             var main = Camera.main;
             if (main != null) _cam.cullingMask = main.cullingMask;   // never the held models' own layer
+            Shockwave.Admit(_cam);                                   // shock fronts, while one is out
             float baseFov = main != null ? main.fieldOfView : 60f;
             _cam.fieldOfView = Mathf.Clamp(baseFov / Mathf.Max(1f, zoom), 0.5f, 90f);
 
@@ -282,6 +284,13 @@ namespace BombsAway
             return Mathf.Clamp(Mathf.FloorToInt((Time.unscaledTime - _typedAt) * TypeRate), 0, n);
         }
 
+        private static bool PageRunning(int page)
+        {
+            for (int i = 0; i < FireMission.TypeCount; i++)
+                if (FireMission.PageOf(i) == page && FireMission.Running(FireMission.TypeAt(i))) return true;
+            return false;
+        }
+
         /// <summary>What the strip shows that changes on its own: the lit key and the types in the air.</summary>
         private static string Strip()
         {
@@ -299,27 +308,48 @@ namespace BombsAway
             return n.Length <= 2 ? n : fallback;
         }
 
-        /// <summary>The game's toolbar in LED: a slot per mission type, the chosen one solid, the keys either side.</summary>
+        /// <summary>
+        /// The game's toolbar in LED: a slot per mission type on the chosen type's page, the
+        /// chosen one solid, the keys either side, and the pages' names in a row over it (ARTY,
+        /// AIR, BOMB) like the Terminal's category tabs over its items: the shown one lit, a tick
+        /// under another if a mission of its is in the air.
+        /// </summary>
         private void DrawStrip(in LrfState s, int cx)
         {
-            int n = FireMission.TypeCount;
-            int total = n * SlotW + (n - 1) * SlotGap, x0 = cx - total / 2;
-            for (int i = 0; i < n; i++)
+            int page = s.MissionIndex >= 0 ? FireMission.PageOf(s.MissionIndex) : 0;
+            var slots = new List<int>();
+            for (int i = 0; i < FireMission.TypeCount; i++) if (FireMission.PageOf(i) == page) slots.Add(i);
+            int n = slots.Count;
+            var widths = FireMission.SlotWidths(slots, out int gap, out int total);
+            int x0 = cx - total / 2;
+            for (int j = 0, x = x0; j < n; x += widths[j] + gap, j++)
             {
-                int x = x0 + i * (SlotW + SlotGap);
+                int i = slots[j], sw = widths[j];
                 string code = FireMission.CodeAt(i);
                 if (i == s.MissionIndex)
                 {
-                    Fill(x, StripY, SlotW, SlotH, Led);
-                    TextCentred(code, x + SlotW / 2 + 1, StripY + 2, Frame);
+                    Fill(x, StripY, sw, SlotH, Led);
+                    TextCentred(code, x + sw / 2 + 1, StripY + 2, Frame);
                 }
                 else
                 {
-                    Outline(x, StripY, SlotW, SlotH, Dim);
-                    TextCentred(code, x + SlotW / 2 + 1, StripY + 2, Dim);
+                    Outline(x, StripY, sw, SlotH, Dim);
+                    TextCentred(code, x + sw / 2 + 1, StripY + 2, Dim);
                 }
                 // A mission of this type in the air: a lit tick under its slot.
-                if (FireMission.Running(FireMission.TypeAt(i))) Fill(x + SlotW / 2 - 2, StripY + SlotH + 1, 5, 1, Led);
+                if (FireMission.Running(FireMission.TypeAt(i))) Fill(x + sw / 2 - 2, StripY + SlotH + 1, 5, 1, Led);
+            }
+
+            // The pages, a row of tabs centred over the strip whatever its width.
+            int tabs = (FireMission.PageCount - 1) * TabGap;
+            for (int pg = 0; pg < FireMission.PageCount; pg++) tabs += FireMission.PageName(pg).Length * (PixelFont.GW + 1) - 1;
+            for (int pg = 0, x = cx - tabs / 2; pg < FireMission.PageCount; pg++)
+            {
+                string name = FireMission.PageName(pg);
+                int w = name.Length * (PixelFont.GW + 1) - 1;
+                TextAt(name, x, TabY, pg == page ? Led : Dim);
+                if (pg != page && PageRunning(pg)) Fill(x + w / 2 - 2, TabY + PixelFont.GH + 1, 5, 1, Led);
+                x += w + TabGap;
             }
 
             bool lit = Time.unscaledTime - FireMission.SwitchedAt < KeyFlash;

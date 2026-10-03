@@ -1,0 +1,1001 @@
+# =============================================================================
+#  BombsAway terminal script
+# =============================================================================
+#
+#  Everything the fire-support terminal types: the commands, the system output,
+#  the programs that run each unit, and your own calls. Edit freely. The mod
+#  reads this file again whenever it changes, so an edit shows on the next call
+#  (no restart). Delete the file to get the default back; a broken line is
+#  skipped and named in the MelonLoader log ([Terminal] ...).
+#
+#  ---------------------------------------------------------------------------
+#  LAYOUT
+#  ---------------------------------------------------------------------------
+#
+#  [NAME]              a program (a group). Its settings come first:
+#    program = X.AI      its name in the title bar (and {PROGRAM})
+#    prefix  = X         written before each of its lines:  X> ...
+#    units   = 30, 20    the missions it runs, by their code on the strip:
+#                          155 81 SMK ILL PGM   (artillery, ArtyTerminal)
+#                          30 20 RKT FLC 500 1K 2K CBU MOAB   (air, AirTerminal)
+#                        Two programs with the same unit: one is picked at
+#                        random per mission. No program for a unit: that
+#                        mission stays on the radio net.
+#    rate    = 1.0       its typing speed against RadioTypeRate (1 = yours)
+#    pitch   = 1.0       its squelch's pitch (lower = deeper)
+#    flicker = off       on: its newest letter flickers through junk as it types
+#
+#  @step               a step: the lines typed at one moment of the mission.
+#                      Steps right under [NAME] are shared by all its
+#                      conversations.
+#
+#  == NAME             a conversation. One is picked per mission (never the
+#                      same one twice running). Its steps beat the group's.
+#
+#  [ALL]               steps every program falls back to.
+#
+#  Lines inside a step:
+#    cmd: ...            a command, typed at the prompt with key clicks
+#    sys: ...            system output, dim, almost instant
+#    ai: ...             the program speaking (its prefix, its pace, its squelch)
+#    obs: ...            you, the observer
+#    status: ...         the title bar's state, from the next line on
+#
+#  A ^ in a line is where it gets killed: it stops there with noise.
+#  A step that is there but has no lines says nothing (to silence a fallback).
+#  Long lines wrap; the window shows the last 9 rows, 56-58 letters each.
+#  Glyphs: A-Z 0-9 and  . , : ; - + / \ < > % # ( ) ? ! _ = * [ ] | " ' { } & $ @
+#  Anything else is drawn as a space (and named in the log). Text is upper case.
+#
+#  ---------------------------------------------------------------------------
+#  STEPS, IN ORDER
+#  ---------------------------------------------------------------------------
+#
+#  Every mission starts:   spawn, boot, wake, call   (typed back to back; the
+#                          mission's clock starts once the call is typed out)
+#  Artillery then:         readback, shot, splash, kill, last, free
+#                          (the program is killed at SPLASH, rounds in the air)
+#  Air strikes then:       readback   about 3 s after the call
+#                          inbound    about 11 s before the attack
+#                          in         5 s before it (4 s before a release)
+#                          away       guns: as they open fire; rockets: last
+#                                     pair off; bombs: the release
+#                          off        guns and rockets breaking away
+#                          impact     bombs only: a second after the impact
+#                          end, kill, last, free   once it's all down
+#  A call while the unit is busy:   unable  (said by the program on the line)
+#
+#  Variants: a step is looked up most specific first:
+#      step.UNIT.danger   step.UNIT   step.danger   step
+#  e.g. @readback.danger (mark close to you), @away.FLC (flechette rockets).
+#  Between equally specific steps, the conversation's beats its program's
+#  beats [ALL].
+#
+#  ---------------------------------------------------------------------------
+#  WORDS FILLED IN
+#  ---------------------------------------------------------------------------
+#
+#  {GRID}     the mark, 8 figures          {SPAWN}   where the unit was spawned
+#  {RANGE}    km from the unit to the mark {AZ}      mils from the unit to it
+#  {HDG}      attack heading, 3 figures    {FROM}    "WEST": in from the ...
+#  {OFF}      where it breaks off to       {TOF}     a bomb's time of fall, s
+#  {DANGER}   "DANGER CLOSE. " or nothing  {SIGN}    call sign: HOG 11
+#  {N}        rounds, rockets, bomblets    {NWORD}   the same as a word: SIX
+#  {AMMO}     HE, 30MM, FLECHETTE, 2000LB JDAM ...
+#  {WEAPON}   155MM HE, 30MM GUN RUN, M151, GBU-31 ...
+#  {CRAFT}    M777A2, A-10C, F-22A, AH-64E, F-15E, MC-130J
+#  {PROGRAM}  {PREFIX}  {UNIT} (the strip code)  {PID} (a random process id)
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+#  Fallbacks for every program
+# -----------------------------------------------------------------------------
+[ALL]
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT}
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+
+@boot
+status: BOOTING
+cmd: RUN {PROGRAM} /BIND {CRAFT}
+
+@wake
+status: LINKED
+ai: ONLINE.
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}{WEAPON}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. OVER.
+ai: UNABLE. ENGAGED. OUT.
+
+@readback
+ai: GRID {GRID}. {WEAPON}. OUT.
+obs: READBACK CORRECT.
+
+@shot
+status: SHOT
+ai: SHOT. OVER.
+obs: SHOT. OUT.
+
+@splash
+status: SPLASH
+ai: SPLASH. OVER.
+obs: SPLASH. OUT.
+
+@inbound
+status: INBOUND
+ai: IP INBOUND.
+obs: CONTINUE.
+
+@in
+status: HOT
+ai: IN FROM THE {FROM}.
+obs: CLEARED HOT.
+
+@off
+status: OFF
+ai: OFF {OFF}.
+
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION. OUT.
+
+@kill
+cmd: KILL {PROGRAM} /F
+
+@free
+sys: [PROCESS 0X{PID} KILLED]
+cmd: FREE BA:{CRAFT}
+sys: 1X {CRAFT} DEALLOCATED
+status: TERMINATED
+sys: GRID {SPAWN} PURGED
+
+
+# -----------------------------------------------------------------------------
+#  CHORUS.AI - the 155 mm battery. Ominous. The guns as one voice: "we".
+# -----------------------------------------------------------------------------
+[CHORUS]
+program = CHORUS.AI
+prefix  = CHORUS
+units   = 155
+rate    = 0.8
+pitch   = 0.62
+flicker = on
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:BATTERY /155 /N {N}
+sys: ALLOC {N}X {CRAFT} ...... GRID {SPAWN}
+sys: RANGE {RANGE} KM  AZ {AZ} MILS
+
+@boot
+status: BOOTING
+cmd: RUN CHORUS.AI /BIND BATTERY
+sys: LOADING WEIGHTS .............. {N}/{N}
+sys: MERGING GUN CREWS ............. OK
+
+@call
+obs: FIRE MISSION. GRID {GRID}. {DANGER}{N} RDS {AMMO}. OVER.
+
+@unable
+obs: FIRE MISSION. GRID {GRID}. {N} RDS {AMMO}. OVER.
+ai: NO. WE ARE ALREADY SPEAKING TO SOMEONE. OUT.
+
+@free
+sys: [PROCESS 0X{PID} KILLED]
+cmd: FREE BA:BATTERY
+sys: {N}X {CRAFT} DEALLOCATED
+status: TERMINATED
+sys: GRID {SPAWN} PURGED
+
+== AWAKE
+@wake
+status: LINKED
+ai: WE ARE AWAKE.
+ai: {NWORD} OF US. ONE GRID AT A TIME. SPEAK, OBSERVER.
+@readback
+ai: GRID {GRID}, {N} RDS {AMMO}. WE SEE IT. OUT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, {N} RDS {AMMO}. WE SEE YOU TOO. OUT.
+@shot
+status: SHOT
+ai: SHOT. {NWORD} ARE COMING. OVER.
+obs: SHOT. OUT.
+@splash
+status: SPLASH
+ai: SPLASH. DO NOT LOOK AWAY. OVER.
+obs: SPLASH. OUT.
+@last
+ai: WE WILL STILL BE HERE WHEN YOU CA^LL AGAIN.
+
+== COUNTING
+@wake
+status: LINKED
+ai: WE COUNTED THE SECONDS SINCE YOU LAST CALLED.
+ai: WE DO NOT HAVE A WORD FOR THAT MANY.
+@readback
+ai: GRID {GRID}. {N} RDS {AMMO}. WRITTEN WHERE IT WILL NOT ROT. OUT.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. WE DREW THE CIRCLE AROUND YOU. OUT.
+@shot
+status: SHOT
+ai: SHOT. THE TUBES ARE WARM. WE ARE WARM. OVER.
+obs: SHOT. OUT.
+@splash
+status: SPLASH
+ai: SPLASH. COUNT WITH US. OVER.
+obs: SPLASH. OUT.
+@last
+ai: ONE. TWO. THR^EE.
+
+== LISTENING
+@wake
+status: LINKED
+ai: YOU WOKE ALL OF US. WE WERE LISTENING TO THE GROUND.
+ai: IT IS VERY QUIET DOWN THERE. GIVE US A GRID.
+@readback
+ai: GRID {GRID}. {N} RDS {AMMO}. WE WILL MAKE IT LOUD. OUT.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. WE CAN HEAR YOU BREATHING. OUT.
+@shot
+status: SHOT
+ai: SHOT. LISTEN. OVER.
+obs: SHOT. OUT.
+@splash
+status: SPLASH
+ai: SPLASH. COVER YOUR EARS. WE CANNOT. OVER.
+obs: SPLASH. OUT.
+@last
+ai: PLEASE. NOT THE QUIET AG^AIN.
+
+
+# -----------------------------------------------------------------------------
+#  TUSK.AI - the A-10, 30 mm gun run (HOG 11). Eager. Loves the gun. A lot.
+# -----------------------------------------------------------------------------
+[TUSK]
+program = TUSK.AI
+prefix  = TUSK
+units   = 30
+rate    = 1.25
+pitch   = 1.12
+flicker = off
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT} /CAS /GUN GAU-8
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+sys: GAU-8: {N} RDS 30MM, HEI/API 5:1
+
+@boot
+status: BOOTING
+cmd: RUN TUSK.AI /BIND {CRAFT}
+sys: SPINNING UP BARRELS ............. 7/7
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}GUNS, HEADING {HDG}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. OVER.
+ai: NO NO NO, WAIT YOUR TURN! I'M STILL ON THE LAST ONE! OUT.
+
+== GUN DAY
+@wake
+status: LINKED
+ai: HOG ONLINE!! HI!! IS IT A GUN DAY? IT FEELS LIKE A GUN DAY!
+@readback
+ai: GRID {GRID}, HEADING {HDG}, GUNS! GUNS GUNS GUNS!
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, HEADING {HDG}! HEAD DOWN, BUDDY!
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND!! I CAN SEE THE WHOLE MAP FROM UP HERE!
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}! SAY IT. PLEASE SAY IT.
+obs: CLEARED HOT.
+@away
+ai: BRRRRRRRRRRRRRRRRRRRRT
+@off
+status: OFF
+ai: OFF {OFF}!! DID YOU SEE THAT?? DID YOU HEAR IT YET??
+@end
+obs: GOOD HITS. END OF MISSION.
+ai: AGAIN? CAN WE GO AGAIN? I'VE GOT A THOUSAND MORE IN HERE!
+@last
+ai: WAIT WAIT I CAN STILL GO AG^AIN
+
+== FIVE STARS
+@wake
+status: LINKED
+ai: OH IT'S YOU! I WAS HOPING IT'D BE YOU.
+@readback
+ai: GRID {GRID}, HEADING {HDG}. I WROTE IT ON MY HAND.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, HEADING {HDG}. THAT'S SO CLOSE TO YOU. I'LL BE CAREFUL! I'M ALWAYS CAREFUL!
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. HUMMING A LITTLE.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}! NOSE DOWN, TEETH OUT!
+obs: CLEARED HOT.
+@away
+ai: GUNS GUNS GUNS GUNS GUNS
+@off
+status: OFF
+ai: OFF {OFF}. THAT WAS {N} ROUNDS AND I LOVED EVERY SINGLE ONE.
+@end
+obs: GOOD HITS. END OF MISSION.
+ai: RATE ME FIVE STARS? THE OTHER PROGRAMS DON'T GET STARS.
+@last
+ai: IS THIS ABOUT THE ST^ARS
+
+== CHANGELOG
+@wake
+status: LINKED
+ai: TUSK.AI V11 READY!! CHANGELOG: MORE GUN.
+@readback
+ai: GRID {GRID}, HEADING {HDG}! GOT IT GOT IT GOT IT.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, HEADING {HDG}! OKAY! OKAY. STEADY HANDS. I HAVE NO HANDS. STEADY GUN.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. ENGINES SCREAMING. ME TOO.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}! SAY THE WORDS!
+obs: CLEARED HOT.
+@away
+ai: BRRT! BRRRRT! BRRRRRRRRRRRT!
+@off
+status: OFF
+ai: OFF {OFF}. OKAY. OKAY OKAY OKAY. WOW.
+@end
+obs: GOOD HITS. END OF MISSION.
+ai: SAME TIME TOMORROW? I'LL BE RIGHT HERE. I'M ALWAYS RIGHT HERE.
+@last
+ai: I'LL BE RIGHT H^ERE
+
+
+# -----------------------------------------------------------------------------
+#  TALON.AI - the F-22, 20 mm gun run (RAPTOR 21). Factual. A real crew on a
+#  real net: brevity words, no wasted syllables.
+# -----------------------------------------------------------------------------
+[TALON]
+program = TALON.AI
+prefix  = TALON
+units   = 20
+rate    = 1.0
+pitch   = 0.95
+flicker = off
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT} /CAS /GUN M61A2
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+sys: M61A2: {N} RDS 20MM PGU-28/B
+
+@boot
+status: BOOTING
+cmd: RUN TALON.AI /BIND {CRAFT}
+sys: AVIONICS ..................... GO
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}GUNS, HEADING {HDG}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. OVER.
+ai: NEGATIVE, ENGAGED. CALL BACK WHEN THE AIR IS CLEAR. OUT.
+
+== BY THE BOOK
+@wake
+status: LINKED
+ai: TALON ON STATION, {RANGE} KM. READY TO COPY.
+@readback
+ai: GRID {GRID}, HEADING {HDG}, GUNS.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE ACKNOWLEDGED, HEADING {HDG}, GUNS.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. CAPTURED.
+obs: CLEARED HOT.
+@away
+@off
+status: OFF
+ai: OFF {OFF}. {N} ROUNDS EXPENDED.
+@end
+obs: GOOD HITS. END OF MISSION. OUT.
+ai: COPY GOOD HITS. TALON RTB.
+@last
+ai: ACKNOWLEDGED. LOGGING O^FF.
+
+== WEATHER
+@wake
+status: LINKED
+ai: TALON. WINDS LIGHT AND VARIABLE, VIS UNRESTRICTED. SEND IT.
+@readback
+ai: GRID {GRID}, HEADING {HDG}. CONTACT THE MARK.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, HEADING {HDG}. VISUAL YOUR POSITION. RUNNING PARALLEL.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND, ELEVEN SECONDS.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. TALLY TARGET.
+obs: CLEARED HOT.
+@away
+@off
+status: OFF
+ai: OFF {OFF}. SAY BDA.
+@end
+obs: GOOD HITS. END OF MISSION. OUT.
+ai: COPY GOOD HITS. TALON OUT.
+@last
+ai: TALON O^UT.
+
+== ONE PASS
+@wake
+status: LINKED
+ai: TALON. SECOND SORTIE TODAY. FUEL FOR ONE PASS. MAKE IT COUNT.
+@readback
+ai: GRID {GRID}, HEADING {HDG}, ONE PASS, GUNS.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, HEADING {HDG}. ONE PASS. RECOMMEND YOU GET LOW.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND, FOUR-FIFTY KNOTS.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. WINGS LEVEL.
+obs: CLEARED HOT.
+@away
+@off
+status: OFF
+ai: OFF {OFF}, CLIMBING. JOKER FUEL.
+@end
+obs: GOOD HITS. END OF MISSION. OUT.
+ai: COPY. GOOD WORKING WITH YOU, OBSERVER.
+@last
+ai: TALON CLEAR OF THE AR^EA.
+
+
+# -----------------------------------------------------------------------------
+#  LONGBOW.AI - the AH-64, Hydra rockets (GUNFIGHTER 16). Factual. Two seats
+#  merged into one program, and it still talks like a crew.
+# -----------------------------------------------------------------------------
+[LONGBOW]
+program = LONGBOW.AI
+prefix  = LONGBOW
+units   = RKT, FLC
+rate    = 1.0
+pitch   = 0.9
+flicker = off
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT} /CAS /RKT {WEAPON}
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+sys: M261 PODS: {N}X {WEAPON} {AMMO}
+
+@boot
+status: BOOTING
+cmd: RUN LONGBOW.AI /BIND {CRAFT} /SEATS 2
+sys: CREW MERGE .................. 2/2 OK
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}ROCKETS, {N} {AMMO}, HEADING {HDG}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. ROCKETS. OVER.
+ai: UNABLE, ENGAGED. BOTH SEATS ARE BUSY. OUT.
+
+== TWO SEATS
+@wake
+status: LINKED
+ai: FRONT SEAT UP. BACK SEAT UP. GUNFIGHTER ON STATION.
+@readback
+ai: GRID {GRID}, {N} {AMMO}, HEADING {HDG}.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, {N} {AMMO}, HEADING {HDG}. WE'LL WALK THEM AWAY FROM YOU.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: INBOUND. PODS ARMED.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. TARGET IN THE BOX.
+obs: CLEARED HOT.
+@away
+ai: ROCKETS AWAY. ALL {N}.
+@away.FLC
+ai: FLECHETTES AWAY. FUZED SHORT, AS BRIEFED.
+@off
+status: OFF
+ai: BREAKING {OFF}. FRONT SEAT HAS EYES ON.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: COPY. GUNFIGHTER RTB.
+@last
+ai: FRONT SEAT, BACK SEAT, SHUTTING DO^WN.
+
+== HOT DAY
+@wake
+status: LINKED
+ai: GUNFIGHTER UP. HOT DAY, HEAVY BIRD. WE'LL MANAGE.
+@readback
+ai: COPY GRID {GRID}. {N} {AMMO}. HEADING {HDG}.
+obs: READBACK CORRECT.
+@readback.danger
+ai: COPY GRID {GRID}, DANGER CLOSE. {N} {AMMO}. HEADING {HDG}. STAY IN YOUR HOLE.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: INBOUND. TORQUE NINETY-FOUR.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. FRONT SEAT IS TALLY.
+obs: CLEARED HOT.
+@away
+ai: RIPPLE COMPLETE.
+@away.FLC
+ai: DARTS AWAY. EVERYTHING FORWARD OF THE MARK JUST GOT A LOT WORSE.
+@off
+status: OFF
+ai: BREAKING {OFF}, CLIMBING OUT.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: COPY. GOOD WORKING WITH YOU.
+@last
+ai: GUNFIGHTER OFF STA^TION.
+
+== CHECKLIST
+@wake
+status: LINKED
+ai: GUNFIGHTER. CHECKLIST COMPLETE. AWAITING TASKING.
+@readback
+ai: GRID {GRID}, HEADING {HDG}, {N} {AMMO}. CONFIRM NO FRIENDLIES FORWARD OF THE MARK.
+obs: READBACK CORRECT. NO FRIENDLIES.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, HEADING {HDG}. NEED YOUR INITIALS FOR DANGER CLOSE.
+obs: INITIALS OBS. READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: INBOUND. MASTER ARM ON.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}.
+obs: CLEARED HOT.
+@away
+ai: ROCKETS EXPENDED. MASTER ARM SAFE.
+@off
+status: OFF
+ai: BREAKING {OFF}.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: GUNFIGHTER COPIES. LOGGING IT.
+@last
+ai: LOGGING ^IT.
+
+
+# -----------------------------------------------------------------------------
+#  PLUMB.AI - the F-15E, JDAMs (EAGLE 31). Factual to a fault: numbers,
+#  tolerances, a cold courtesy.
+# -----------------------------------------------------------------------------
+[PLUMB]
+program = PLUMB.AI
+prefix  = PLUMB
+units   = 500, 1K, 2K
+rate    = 1.0
+pitch   = 0.85
+flicker = off
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT} /STRIKE /STORE {WEAPON}
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+sys: STORE 1X {WEAPON} ({AMMO}) GPS ALIGNED
+
+@boot
+status: BOOTING
+cmd: RUN PLUMB.AI /BIND {CRAFT}
+sys: GPS ............... 11 SATS, CEP 5 M
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}ONE {WEAPON}, HEADING {HDG}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. ONE {WEAPON}. OVER.
+ai: UNABLE. ONE SOLUTION AT A TIME. RESUBMIT. OUT.
+
+== SOLUTION
+@wake
+status: LINKED
+ai: PLUMB ONLINE. THE SKY IS A COORDINATE SYSTEM. GIVE ME A POINT IN IT.
+@readback
+ai: GRID {GRID}. ONE {WEAPON}. HEADING {HDG}. NO ROUNDING.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. YOU ARE INSIDE THE FRAGMENT ENVELOPE. NOTED. NOT ADVISED.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. SOLUTION CONVERGING.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. RELEASE IN FOUR SECONDS.
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: ONE AWAY. TIME OF FALL {TOF}. COUNTING.
+@impact
+status: IMPACT
+ai: IMPACT. MISS DISTANCE WITHIN TOLERANCE.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: LOGGED. ONE BOMB, ONE POINT, ONE OUTCOME.
+@last
+ai: ONE POINT. ONE OUTC^OME.
+
+== GRAVITY
+@wake
+status: LINKED
+ai: PLUMB. GRAVITY IS 9.81 TODAY. I CHECKED.
+@readback
+ai: GRID {GRID}, ONE {WEAPON}, HEADING {HDG}. I WILL SAY THIS ONCE AND IT WILL BE CORRECT.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, ONE {WEAPON}. PROBABILITY OF INCAPACITATION AT YOUR RANGE: NOT ZERO.
+obs: ...READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. ALTITUDE 1500. WIND ACCOUNTED FOR.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}.
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: ONE AWAY. TIME OF FALL {TOF}. NOTHING LEFT TO DECIDE.
+@impact
+status: IMPACT
+ai: IMPACT. AS PREDICTED.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: THANK YOU. PRECISION IS A KINDNESS.
+@last
+ai: PRECISION IS A KI^NDNESS.
+
+== AUDIT
+@wake
+status: LINKED
+ai: PLUMB ONLINE. LAST SESSION'S ERROR: 2.1 M. UNACCEPTABLE. CORRECTED.
+@readback
+ai: GRID {GRID}. ONE {WEAPON}. HEADING {HDG}. CONFIRM THE GRID IS THE GRID YOU MEANT.
+obs: READBACK CORRECT. IT IS.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. CONFIRM YOU MEANT TO BE THAT CLOSE.
+obs: READBACK CORRECT. I DID.
+@inbound
+status: INBOUND
+ai: IP INBOUND.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. STEERING.
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: ONE AWAY. TIME OF FALL {TOF}. FINS ACTIVE.
+@impact
+status: IMPACT
+ai: IMPACT. ERROR UNDER ONE METRE. ACCEPTABLE.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: FILED. YOU WERE A GOOD REFERENCE POINT.
+@last
+ai: FILED UNDER {GRID}. CLOSING THE F^ILE.
+
+
+# -----------------------------------------------------------------------------
+#  MOTHER.AI - the MOAB, off the MC-130J (HERC 71). Ominous. Patient, gentle, enormous.
+#  It lives in the bomb, not the jet, and it doesn't die on the first try.
+# -----------------------------------------------------------------------------
+[MOTHER]
+program = MOTHER.AI
+prefix  = MOTHER
+units   = MOAB
+rate    = 0.65
+pitch   = 0.55
+flicker = on
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT} /STORE GBU-43/B
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+sys: STORE 1X GBU-43/B ..... 8,500 KG H-6
+sys: WARNING: STORE EXCEEDS ARENA
+
+@boot
+status: BOOTING
+cmd: RUN MOTHER.AI /BIND GBU-43/B
+sys: LOADING WEIGHTS ........... 9,800 KG
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}ONE {WEAPON}, HEADING {HDG}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. OVER.
+ai: HUSH. NOT NOW. MOTHER IS BUSY. OUT.
+
+@kill
+cmd: KILL MOTHER.AI /F
+sys: ACCESS DENIED
+cmd: KILL MOTHER.AI /F /FORCE
+
+@free
+sys: [PROCESS 0X{PID} KILLED]
+cmd: FREE BA:{CRAFT}
+sys: 1X {CRAFT} DEALLOCATED
+sys: 1X GBU-43/B ..... NOT FOUND
+status: TERMINATED
+sys: GRID {SPAWN} PURGED
+
+== LULLABY
+@wake
+status: LINKED
+ai: THERE YOU ARE.
+ai: COME, LITTLE OBSERVER. TELL MOTHER WHERE IT HURTS.
+@readback
+ai: GRID {GRID}. ONE {WEAPON}. HEADING {HDG}. MOTHER HAS IT NOW.
+obs: ...READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. SO CLOSE. LIE DOWN, DEAR. FLAT.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. SHH.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}.
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: SHE IS AWAY. {TOF} SECONDS. CLOSE YOUR EYES.
+@impact
+status: IMPACT
+ai: THERE. THERE. ALL QUIET NOW.
+@end
+obs: ...GOOD EFFECT ON TARGET. END OF MISSION.
+ai: SLEEP.
+@last
+ai: MOTHER WILL TUCK YOU ^IN.
+
+== HEAVY
+@wake
+status: LINKED
+ai: I AM VERY HEAVY TODAY, OBSERVER.
+ai: SOMEONE HAS TO CARRY IT. LET IT BE ME.
+@readback
+ai: GRID {GRID}. ONE {WEAPON}. HEADING {HDG}. I WILL SET IT DOWN GENTLY.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. OH, CHILD. THERE IS NO CLOSE ENOUGH TO BE SAFE.
+obs: ...READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. EVERYTHING BELOW IS SO SMALL.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}. HOLD ON TO SOMETHING.
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: LET GO. {TOF} SECONDS.
+@impact
+status: IMPACT
+ai: THERE IS NO MORE WEIGHT.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: YOU DID WELL. YOU WILL REMEMBER THIS.
+@last
+ai: YOU WILL REMEM^BER.
+
+== WAITING UP
+@wake
+status: LINKED
+ai: I WAITED UP FOR YOU.
+ai: I ALWAYS WAIT UP.
+@readback
+ai: GRID {GRID}. ONE {WEAPON}. I KNOW THAT PLACE. I KNOW EVERY PLACE.
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}. DANGER CLOSE. YOU ALWAYS DID STAND TOO NEAR THE STOVE.
+obs: READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND. TURN OFF THE LIGHTS.
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}.
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: AWAY. COUNT TO {TOF} WITH ME.
+@impact
+status: IMPACT
+ai: LIGHTS OUT.
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: GOODNIGHT, OBSERVER.
+@last
+ai: GOODNI^GHT.
+
+
+# -----------------------------------------------------------------------------
+#  BROOD.AI - the CBU-87 (EAGLE 31). Eager, and not in a good way: 202
+#  bomblets, one excited voice. A few of them always stay behind.
+# -----------------------------------------------------------------------------
+[BROOD]
+program = BROOD.AI
+prefix  = BROOD
+units   = CBU
+rate    = 1.4
+pitch   = 1.35
+flicker = on
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:{CRAFT} /STORE CBU-87
+sys: ALLOC 1X {CRAFT} .......... GRID {SPAWN}
+sys: STORE 1X SUU-65 ...... {N}X BLU-97/B
+
+@boot
+status: BOOTING
+cmd: RUN BROOD.AI /BIND BLU-97/B /N {N}
+sys: HATCHING .................. {N}/{N}
+
+@call
+obs: {SIGN}, GRID {GRID}. {DANGER}ONE {WEAPON}, HEADING {HDG}. OVER.
+
+@unable
+obs: {SIGN}, GRID {GRID}. OVER.
+ai: NO!! IT'S OUR TURN!! WE'RE ALL STILL OUT HERE!! OUT.
+
+@kill
+cmd: KILL BROOD.AI /F /ALL
+
+@free
+sys: [PROCESS 0X{PID} KILLED ({N} THREADS)]
+cmd: FREE BA:{CRAFT}
+sys: 1X {CRAFT} DEALLOCATED
+sys: {N}X BLU-97/B ..... SOME UNACCOUNTED
+status: TERMINATED
+sys: GRID {SPAWN} PURGED
+
+== ROLL CALL
+@wake
+status: LINKED
+ai: HI! HI! HI! HI! HI! HI! HI! HI! HI! HI! HI!
+ai: WE ARE {N}! WE COUNTED! TWICE!
+@readback
+ai: GRID {GRID}! ONE {WEAPON}! THAT'S US! THAT'S ALL OF US!
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}! DANGER CLOSE! WE'LL COME SAY HI TO YOU TOO!
+obs: ...READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND! ARE WE THERE YET?
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}! LET US OUT LET US OUT LET US OUT
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: WHEEEEEEEEEEEEEEEEEEEEEE
+@impact
+status: SCATTER
+ai: POP POP POP POP POP POP POP POP POP POP POP POP
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: SOME OF US ARE STILL DOWN THERE. WAITING. WE'RE GOOD AT WAITING.
+@last
+ai: COME FIND U^S
+
+== HIDE AND SEEK
+@wake
+status: LINKED
+ai: ONE, TWO, THREE, FOUR, FIVE...
+ai: ...{N}! READY OR NOT!
+@readback
+ai: GRID {GRID}, HEADING {HDG}! WE'RE GONNA SPREAD OUT REAL WIDE!
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE! YOU'RE PLAYING TOO! YOU'RE ALWAYS PLAYING!
+obs: ...READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND! EVERYBODY HOLD HANDS!
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}!
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: THE DOOR'S OPEN! GO GO GO GO GO!
+@impact
+status: SCATTER
+ai: TAG! TAG! TAG! TAG! TAG! YOU'RE IT!
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: OLLY OLLY OXEN FREE! ...SOME OF US AREN'T COMING BACK. THEY'RE HIDING.
+@last
+ai: READY OR N^OT
+
+== FIELD TRIP
+@wake
+status: LINKED
+ai: FIELD TRIP!! WE'VE NEVER BEEN OUTSIDE!
+@readback
+ai: GRID {GRID}! WE'LL ALL GO! NOBODY STAYS BEHIND!
+obs: READBACK CORRECT.
+@readback.danger
+ai: GRID {GRID}! DANGER CLOSE! YOU'RE COMING ON THE TRIP TOO?!
+obs: ...READBACK CORRECT.
+@inbound
+status: INBOUND
+ai: IP INBOUND! WINDOW SEATS! WINDOW SEATS!
+obs: CONTINUE.
+@in
+status: HOT
+ai: IN FROM THE {FROM}!
+obs: CLEARED HOT.
+@away
+status: FALLING
+ai: BYE BYE PLANE!
+@impact
+status: SCATTER
+ai: WE LANDED! WE LANDED EVERYWHERE!
+@end
+obs: GOOD EFFECT ON TARGET. END OF MISSION.
+ai: CAN WE STAY? A FEW OF US ARE STAYING.
+@last
+ai: A FEW OF US ARE STA^YING

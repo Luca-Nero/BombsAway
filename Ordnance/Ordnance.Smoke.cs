@@ -16,6 +16,8 @@ namespace BombsAway
     //
     // The warhead key cycles the colour while it is in hand. The can's band (its own part,
     // painted near white) shows it, tinted through a property block so nothing is instanced.
+    // The change isn't a cut: a terminal beside the can reloads the dye while the new colour
+    // fights the old one for the band, texel by texel (SmokeTerminal.cs).
     // ══════════════════════════════════════════════════════════════════════════════
 
     public partial class Core
@@ -31,6 +33,7 @@ namespace BombsAway
 
         private static int _smokeColour;
         private static MaterialPropertyBlock _bandBlock;
+        private static readonly SmokeTerminal _smokeTerm = new SmokeTerminal();
 
         private static Color SmokeColour => SmokeColours[_smokeColour].Colour;
         private static string SmokeColourName => SmokeColours[_smokeColour].Name;
@@ -38,17 +41,48 @@ namespace BombsAway
         /// <summary>The warhead key with the smoke grenade in hand: the next colour.</summary>
         private static void CycleSmokeColour()
         {
+            // From what holds the band now, even part way through the last change.
+            Color from = _smokeTerm.Running ? _smokeTerm.Colour : SmokeColour;
             _smokeColour = (_smokeColour + 1) % SmokeColours.Length;
-            Sfx.PlayHeld("CluClick");
-            if (_held != null && _heldKind == Ordnance.Smoke) TintBand(_held.transform, SmokeColour);
+            // While the can is still being spawned its parts are on other materials: the
+            // colour simply changes, as it did before the terminal.
+            if (_held != null && _heldKind == Ordnance.Smoke && Spawning)
+            {
+                TintBand(_held.transform, SmokeColour);
+                Sfx.PlayHeld("CluClick");
+            }
+            else if (_held != null && _heldKind == Ordnance.Smoke)
+            {
+                var band = BandRenderer(_held.transform);
+                _smokeTerm.Begin(from, SmokeColour, SmokeColourName, band);
+                if (!_smokeTerm.PaintBand(band)) TintBand(_held.transform, SmokeColour);
+            }
+            else Sfx.PlayHeld("CluClick");
+        }
+
+        /// <summary>Every LateUpdate: the terminal beside the can, and the band while it is fought over.</summary>
+        private static void TickSmokeTerminal()
+        {
+            if (!_smokeTerm.Active) return;
+            bool inHand = _held != null && _heldKind == Ordnance.Smoke;
+            if (!inHand) _smokeTerm.Close();
+            var cam = Camera.main;
+            int layer = cam != null ? ViewmodelCamera.Layer(cam) : -1;
+            if (layer >= 0) ViewmodelCamera.Sync();
+            _smokeTerm.Tick(cam, inHand ? _held.transform : null, layer >= 0 ? layer : (_held != null ? _held.layer : 0));
+            if (inHand && !_smokeTerm.PaintBand(BandRenderer(_held.transform))) TintBand(_held.transform, SmokeColour);
+        }
+
+        private static Renderer BandRenderer(Transform root)
+        {
+            var band = root != null ? root.Find("Band") : null;
+            return band != null ? band.GetComponent<Renderer>() : null;
         }
 
         /// <summary>Colours a smoke can's band (the part named Band).</summary>
         private static void TintBand(Transform root, Color colour)
         {
-            if (root == null) return;
-            var band = root.Find("Band");
-            var r = band != null ? band.GetComponent<Renderer>() : null;
+            var r = BandRenderer(root);
             if (r == null) return;
             if (_bandBlock == null) _bandBlock = new MaterialPropertyBlock();
             _bandBlock.Clear();

@@ -81,7 +81,7 @@ namespace BombsAway
                 if (_buttonTime > 0.25f) _buttonTime = -1f;
             }
 
-            if (_raise < 1f || _at4Step == AT4Step.Armed) return;
+            if (_raise < 1f || Spawning || _at4Step == AT4Step.Armed) return;
             _at4Time += dt;
             switch (_at4Step)
             {

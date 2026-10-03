@@ -154,6 +154,8 @@ namespace BombsAway
         public int FragPower = 3000;
         /// <summary>The charge as kg of TNT: drives FruitLib's physical overpressure (0 = old radius model).</summary>
         public float ChargeKgTNT = 0f;
+        /// <summary>This kind's blast-wave push, times the BlastPushScale setting (the gun runs' bursts throw harder than their charge).</summary>
+        public float PushScale = 1f;
         /// <summary>Shaped-charge jet (FruitBallistics 5.4): rays, full cone angle, free metres through walls.</summary>
         public int JetRays = 0;
         public float JetConeDeg = 3f;
@@ -166,6 +168,25 @@ namespace BombsAway
         public FruitLib.ExplosionFeatures Features = FruitLib.ExplosionFeatures.All;
         /// <summary>What still reaches something behind full cover, 0..1 (FruitLib's default 0.15).</summary>
         public float BlastDiffraction = 0.15f;
+        /// <summary>How far out the blast wave pushes and injures, m (FruitLib 5.7.0; its defaults 40 / 60). The big bombs reach farther.</summary>
+        public float MaxPushRange = 40f, MaxInjuryRange = 60f;
+        /// <summary>Share of a fragment's power lost per metre, as exp(-x d) (FruitLib's 0.08): a bomb's heavy fragments carry far.</summary>
+        public float FragPowerFalloff = 0.08f;
+        /// <summary>This kind's wound budget per detonation; 0 = the MaxWoundsPerExplosion setting. A bomb among a crowd needs far more than a grenade.</summary>
+        public int MaxWounds = 0;
+        /// <summary>FruitLib 5.8.0's targeted fragments: the case's real fragment count (0 = off; FragRayCount
+        /// rays as before). With it on, FragRayCount is only the untargeted scenery rays.</summary>
+        public int FragTargeted = 0;
+        /// <summary>Most fragment walks one limb takes from one detonation (0 = no limit).</summary>
+        public int MaxWalksPerLimb = 0;
+        /// <summary>Side-spray belt: thickness in degrees (0 = an even sphere) and its share of the fragments.</summary>
+        public float FragBeltDeg = 0f, FragBeltShare = 0.8f;
+        /// <summary>The casing's long axis for the belt (a bomb's flight); zero = Forward. Forward stays what effects are aimed by.</summary>
+        public Vector3 Axis = Vector3.zero;
+        /// <summary>How well the fragments go through things, against steel chunks of their mass (1); the MOAB's case is aluminium.</summary>
+        public float FragPenetrationScale = 1f;
+        /// <summary>A burst this low over the ground counts as a surface burst, m/kg^(1/3) (FruitLib 5.10.0; 0 = only on contact).</summary>
+        public float SurfaceBurstScaledHeight = 0f;
 
         public static ExplosionParams FromGrenadeConfig(Vector3 origin)
         {
@@ -525,6 +546,291 @@ namespace BombsAway
                 ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.MortarDamageScale,
+            };
+        }
+
+        /// <summary>
+        /// One 30 mm HEI round going off where it hits (FireSupport/AirStrike.cs): a small charge
+        /// in a naturally fragmenting body, made more devastating than the real one (5.12.0).
+        /// Hits come at 65 a second, so the fragment count stays low.
+        /// </summary>
+        public static ExplosionParams FromGun30Config(Vector3 origin) =>
+            GunBurst("Gun30", origin, Config.Gun30HEIChargeKgTNT, Config.Gun30HEIDamageScale, Config.Gun30HEIPushScale,
+                     Config.Gun30FragRayCount, Config.Gun30HEIFragPower, Config.Gun30HEIFragKick, Config.Gun30HEIOverpressurePoints,
+                     Config.Gun30BlastRadius, Config.Gun30BlastForce, Config.Gun30BlastUpward, Config.Gun30OverpressureRadius,
+                     Config.Gun30FragSpeed, Config.Gun30FragMaxTime);
+
+        /// <summary>One 20 mm PGU-28/B round going off where it hits (the F-22's gun run): the 30 mm's, smaller.</summary>
+        public static ExplosionParams FromGun20Config(Vector3 origin) =>
+            GunBurst("Gun20", origin, Config.Gun20HEIChargeKgTNT, Config.Gun20HEIDamageScale, Config.Gun20HEIPushScale,
+                     Config.Gun20FragRayCount, Config.Gun20HEIFragPower, Config.Gun20HEIFragKick, Config.Gun20HEIOverpressurePoints,
+                     Config.Gun20BlastRadius, Config.Gun20BlastForce, Config.Gun20BlastUpward, Config.Gun20OverpressureRadius,
+                     Config.Gun20FragSpeed, Config.Gun20FragMaxTime);
+
+        /// <summary>
+        /// A JDAM's bomb going off (FireSupport/AirStrike.Bombs.cs): <paramref name="kind"/> is
+        /// Jdam500, Jdam1000 or Jdam2000 (Mk 82 / 83 / 84, about 95 / 215 / 460 kg TNT). A thick
+        /// cast case breaks into heavy fragments that carry far (the Mk 84's are lethal to about
+        /// 120 m), and the blast wave pushes and injures past FruitLib's usual reach.
+        /// </summary>
+        public static ExplosionParams FromJdamConfig(string kind, Vector3 origin)
+        {
+            // The fragments' arcs are flown at about their real speed, so they go out flat over
+            // the arena (a slow, readable arc lobbed them over people and into the ground
+            // within ~15 m); the drawn debris is a small share of them.
+            float charge, push, fragSpeed, falloff;
+            int frags, rays, power, wounds;
+            switch (kind)
+            {
+                case "Jdam500":
+                    charge = Config.Jdam500ChargeKgTNT; frags = Config.Jdam500Fragments; rays = Config.Jdam500WorldRays; power = Config.Jdam500FragPower;
+                    push = Config.Jdam500PushRange; fragSpeed = 180f; falloff = 0.02f; wounds = Config.Jdam500MaxWounds;
+                    break;
+                case "Jdam1000":
+                    charge = Config.Jdam1000ChargeKgTNT; frags = Config.Jdam1000Fragments; rays = Config.Jdam1000WorldRays; power = Config.Jdam1000FragPower;
+                    push = Config.Jdam1000PushRange; fragSpeed = 200f; falloff = 0.017f; wounds = Config.Jdam1000MaxWounds;
+                    break;
+                default:
+                    kind = "Jdam2000";
+                    charge = Config.Jdam2000ChargeKgTNT; frags = Config.Jdam2000Fragments; rays = Config.Jdam2000WorldRays; power = Config.Jdam2000FragPower;
+                    push = Config.Jdam2000PushRange; fragSpeed = 220f; falloff = 0.015f; wounds = Config.Jdam2000MaxWounds;
+                    break;
+            }
+            float r = Mathf.Pow(Mathf.Max(1f, charge) / 95f, 1f / 3f);   // the old-model fallbacks, by the 500 lb's
+            return new ExplosionParams
+            {
+                Kind = kind,
+                FragPower = power,
+                ChargeKgTNT = charge,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.up,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = 30f * r,
+                BlastForce = 12f,
+                BlastUpward = 4f,
+
+                OverpressureRadius = 25f * r,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = 30,
+
+                // The case's fragments are aimed at the limbs in reach (FruitLib 5.8.0), so every
+                // body gets its share however many there are; the rays only dress the scenery.
+                FragTargeted = Mathf.Max(0, frags),
+                FragRayCount = Mathf.Max(0, rays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.JdamWalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.JdamFragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.JdamFragBeltShare),
+                FragSpeed = fragSpeed,
+                FragMaxTime = 6f,
+                FragImpulse = 0.3f,
+                FragPowerFalloff = falloff,
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = 0f,   // the flat arcs would fling it off at their speed; FX_Jdam has its own clods
+                DamageScale = Config.JdamDamageScale,
+
+                MaxWounds = Mathf.Max(0, wounds),
+                MaxPushRange = Mathf.Max(10f, push),
+                MaxInjuryRange = Mathf.Max(10f, Config.JdamInjuryRange),
+            };
+        }
+
+        /// <summary>
+        /// A Hydra 70 rocket's M151 warhead going off where it hits (FireSupport/AirStrike.Rockets.cs):
+        /// 1.04 kg of Comp B-4 (~1.4 kg TNT) in a 3.9 kg malleable cast-iron body. Bursting radius
+        /// about 10 m, its fast fragments lethal past 50 m. As the bombs': the body's fragments are
+        /// aimed at the limbs in reach, most of them in a belt square to the rocket's flight.
+        /// </summary>
+        public static ExplosionParams FromHydraConfig(Vector3 origin)
+        {
+            return new ExplosionParams
+            {
+                Kind = "Hydra",
+                FragPower = Config.HydraFragPower,
+                ChargeKgTNT = Config.HydraChargeKgTNT,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.up,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = 8f,
+                BlastForce = 4.5f,
+                BlastUpward = 1.5f,
+
+                OverpressureRadius = 12f,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = 14,
+
+                FragTargeted = Mathf.Max(0, Config.HydraFragments),
+                FragRayCount = Mathf.Max(0, Config.HydraWorldRays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.HydraWalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.HydraFragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.HydraFragBeltShare),
+                FragSpeed = 120f,          // flat arcs, as the bombs' (a slow one lobs them over people)
+                FragMaxTime = 3f,
+                FragImpulse = 0.2f,
+                FragPowerFalloff = 0.035f, // ~17 % of its power left at 50 m
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = 0f,
+                DamageScale = Config.HydraDamageScale,
+                MaxWounds = Mathf.Max(0, Config.HydraMaxWounds),
+            };
+        }
+
+        /// <summary>
+        /// The GBU-43/B MOAB going off (FireSupport/AirStrike.Bombs.cs): 8,500 kg of H-6, about
+        /// 11 t of TNT, in a thin aluminium case, air-burst about 2 m up. A blast weapon above
+        /// all: limbs blown apart within about 30 m, skin torn to about 50 m, lungs to about 95 m
+        /// (it counts as a surface burst so low), and the wave throws bodies out to MoabPushRange.
+        /// The 1.3 t case breaks into light aluminium chunks that carry the lethal zone out to
+        /// about 150 m (its reported lethal radius), aimed as the JDAMs' are.
+        /// </summary>
+        public static ExplosionParams FromMoabConfig(Vector3 origin)
+        {
+            float r = Mathf.Pow(Mathf.Max(1f, Config.MoabChargeKgTNT) / 95f, 1f / 3f);   // the old-model fallbacks, by the 500 lb's
+            return new ExplosionParams
+            {
+                Kind = "Moab",
+                FragPower = Config.MoabFragPower,
+                ChargeKgTNT = Config.MoabChargeKgTNT,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.up,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = 30f * r,
+                BlastForce = 12f,
+                BlastUpward = 4f,
+
+                OverpressureRadius = 25f * r,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = 12,   // fewer than the JDAMs' 30: limbs torn this far out are many, and most are blown apart anyway
+                SurfaceBurstScaledHeight = Mathf.Max(0f, Config.MoabSurfaceBurstHeight),
+
+                FragTargeted = Mathf.Max(0, Config.MoabFragments),
+                FragRayCount = Mathf.Max(0, Config.MoabWorldRays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.MoabWalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.MoabFragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.MoabFragBeltShare),
+                FragSpeed = 200f,
+                FragMaxTime = 6f,
+                FragImpulse = 0.3f,
+                FragPowerFalloff = 0.02f,       // 5 % of its power left at 150 m
+                FragPenetrationScale = 0.35f,   // aluminium: about a third of steel's density
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = 0f,
+                DamageScale = Config.MoabDamageScale,
+
+                MaxWounds = Mathf.Max(0, Config.MoabMaxWounds),
+                MaxPushRange = Mathf.Max(10f, Config.MoabPushRange),
+                MaxInjuryRange = Mathf.Max(10f, Config.MoabInjuryRange),
+            };
+        }
+
+        /// <summary>
+        /// One BLU-97/B combined effects bomb going off where it lands (FireSupport/AirStrike.Cluster.cs):
+        /// 287 g of cyclotol (~0.35 kg TNT of blast) behind a copper cone, in a scored steel case
+        /// that breaks into ~300 fragments, with a zirconium ring. Three effects at once: the jet
+        /// punches down along its fall (over 200 mm of armour; through a roof into the room
+        /// under it), the case's fragments fly out square to it, lethal to about 20 m, and the
+        /// zirconium sets sparks flying (the effect only). The caller sets Forward (and Axis) to the
+        /// bomblet's fall.
+        /// </summary>
+        public static ExplosionParams FromBlu97Config(Vector3 origin)
+        {
+            return new ExplosionParams
+            {
+                Kind = "Blu97",
+                FragPower = Config.Blu97FragPower,
+                ChargeKgTNT = Config.Blu97ChargeKgTNT,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.down,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = 4f,
+                BlastForce = 3f,
+                BlastUpward = 1f,
+
+                OverpressureRadius = 5f,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = 6,
+
+                FragTargeted = Mathf.Max(0, Config.Blu97Fragments),
+                FragRayCount = Mathf.Max(0, Config.Blu97WorldRays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.Blu97WalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.Blu97FragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.Blu97FragBeltShare),
+                FragSpeed = 120f,
+                FragMaxTime = 2f,
+                FragImpulse = 0.2f,
+                FragPowerFalloff = 0.07f,       // 5 % of its power left at about 43 m, a quarter at 20 m
+
+                // The shaped charge, down the fall (FruitLib 5.10.0: a jet on a full-sphere spec).
+                JetRays = Mathf.Max(0, Config.Blu97JetRays),
+                JetConeDeg = 2f,
+                JetPenetration = Mathf.Max(0f, Config.Blu97JetPenetration),
+                JetPower = Config.Blu97JetPower,
+                JetSpallCount = Mathf.Max(0, Config.Blu97JetSpallCount),
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = 0f,
+                DamageScale = Config.Blu97DamageScale,
+                MaxWounds = Mathf.Max(0, Config.Blu97MaxWounds),
+            };
+        }
+
+        private static ExplosionParams GunBurst(string kind, Vector3 origin, float charge, float damage, float push,
+                                                int frags, int fragPower, float kick, int opPoints,
+                                                float blastRadius, float blastForce, float blastUpward, float opRadius,
+                                                float fragSpeed, float fragMaxTime)
+        {
+            return new ExplosionParams
+            {
+                Kind = kind,
+                FragPower = fragPower,
+                ChargeKgTNT = charge,
+                PushScale = push,
+                Sticky = false,
+                Detonation = DetonationMode.Impact,
+
+                Origin = origin,
+                Forward = Vector3.up,
+                HSpreadDeg = 360f,
+                VSpreadDeg = 360f,
+
+                BlastRadius = blastRadius,
+                BlastForce = blastForce,
+                BlastUpward = blastUpward,
+
+                OverpressureRadius = opRadius,
+                OverpressureFalloffExp = 1f,
+                OverpressureWoundPoints = opPoints,
+
+                FragRayCount = frags,
+                FragSpeed = fragSpeed,
+                FragMaxTime = fragMaxTime,
+                FragImpulse = kick,
+
+                ArcSteps = Config.ArcDebugSteps,
+                DebrisRaysRatio = 0f,
+                DamageScale = damage,
             };
         }
 

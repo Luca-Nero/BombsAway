@@ -48,6 +48,14 @@ namespace BombsAway
                 SpecFor(ExplosionParams.FromMissileTBXConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromArtilleryConfig(Vector3.zero));
                 SpecFor(ExplosionParams.FromMortarConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromGun30Config(Vector3.zero));
+                SpecFor(ExplosionParams.FromGun20Config(Vector3.zero));
+                SpecFor(ExplosionParams.FromJdamConfig("Jdam500", Vector3.zero));
+                SpecFor(ExplosionParams.FromJdamConfig("Jdam1000", Vector3.zero));
+                SpecFor(ExplosionParams.FromJdamConfig("Jdam2000", Vector3.zero));
+                SpecFor(ExplosionParams.FromHydraConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromMoabConfig(Vector3.zero));
+                SpecFor(ExplosionParams.FromBlu97Config(Vector3.zero));
             }
             catch (System.Exception e) { MelonLogger.Warning($"[Explosion] pre-registering specs failed: {e.Message}"); }
         }
@@ -58,7 +66,7 @@ namespace BombsAway
         public static void Detonate(ExplosionParams p)
         {
             var spec = SpecFor(p);
-            FruitBallistics.SpawnExplosion(spec.Id, p.Origin, p.Forward);
+            FruitBallistics.SpawnExplosion(spec.Id, p.Origin, p.Forward, p.Axis, 0, ExplosionFeatures.All);
         }
 
         /// <summary>The FruitLib spec for this kind of explosive, brought in line with
@@ -91,7 +99,16 @@ namespace BombsAway
             s.FragImpulse = p.FragImpulse;
             s.FragPower   = p.FragPower;
             s.ChargeKgTNT = p.ChargeKgTNT;
-            s.BlastPushScale = Config.BlastPushScale;
+            s.BlastPushScale = Config.BlastPushScale * Mathf.Max(0f, p.PushScale);
+            s.MaxPushRange   = p.MaxPushRange;
+            s.MaxInjuryRange = p.MaxInjuryRange;
+            s.FragPowerFalloff = p.FragPowerFalloff;
+            s.FragTargeted     = p.FragTargeted;
+            s.MaxWalksPerLimb  = p.MaxWalksPerLimb;
+            s.FragBeltDeg      = p.FragBeltDeg;
+            s.FragBeltShare    = p.FragBeltShare;
+            s.FragPenetrationScale = p.FragPenetrationScale;
+            s.SurfaceBurstScaledHeight = p.SurfaceBurstScaledHeight;
             s.ArcSteps    = p.ArcSteps;
             // What the fragments are: with FragPower this sets their real speed, and how well
             // they go through walls (FruitLib 5.4).
@@ -104,8 +121,9 @@ namespace BombsAway
 
             // WoundIntensity used to scale the old cone; it now scales every wound.
             s.DamageScale = p.DamageScale * Mathf.Max(0f, Config.WoundIntensity);
-            // 0 = unlimited, as the setting says.
-            s.MaxWounds   = Config.MaxWoundsPerExplosion > 0 ? Config.MaxWoundsPerExplosion : 1000000;
+            // 0 = unlimited, as the setting says. A kind may bring its own (the bombs).
+            int wounds = p.MaxWounds > 0 ? p.MaxWounds : Config.MaxWoundsPerExplosion;
+            s.MaxWounds   = wounds > 0 ? wounds : 1000000;
             s.SecondaryMaxWounds =s.MaxWounds >= 1000000 ? 1000000 : Mathf.Max(1, s.MaxWounds / 2);
 
             s.AdaptiveQuality = Config.AdaptiveQuality;
@@ -139,6 +157,14 @@ namespace BombsAway
                 case "MissileHE": return 1.5f;
                 case "Arty155":   return 3f;     // a thick forged body: heavier, slower pieces
                 case "Mortar81":  return 1.2f;   // a thin cast-iron body: small, fast pieces
+                case "Gun30":     return 2f;     // a 30 mm HEI body breaking up
+                case "Gun20":     return 1f;     // a 20 mm one
+                case "Jdam500":   return 6f;     // a bomb's thick cast case: heavy pieces that carry far
+                case "Jdam1000":  return 8f;
+                case "Jdam2000":  return 10f;
+                case "Hydra":     return 1.5f;   // the M151's cast-iron body
+                case "Moab":      return 12f;    // chunks of its aluminium case (penetrating as aluminium: FragPenetrationScale)
+                case "Blu97":     return 2f;     // the scored steel case's ~30 grain pieces
                 default:          return 2f;
             }
         }
@@ -154,14 +180,22 @@ namespace BombsAway
             {
                 try { SmokeCloud.Blast(x.Origin, x.Forward, x.Spec.ChargeKgTNT, x.Spec.BlastRadius, x.Spec.HSpreadDeg < 150f); }
                 catch (System.Exception e) { MelonLogger.Warning($"[Smoke] blast failed: {e.Message}"); }
+                // And shows its shock front, whoever's it is.
+                Shockwave.Blast(x);
             }
 
             if (!Ours(x.Spec)) return;
 
-            if (Config.CamFXEnabled) CameraFX.AddTrauma(x.Origin);
-
             // The bundle's effect for this kind (ExplosionFx), or the old code-built one.
             string kind = x.Spec.Id.Substring(SpecPrefix.Length);
+            // A gun run's hits come at 65 to 100 a second: each only nudges the camera.
+            bool gunHit = kind == "Gun30" || kind == "Gun20";
+            // A bomb's shake arrives with its blast wave, from much farther off (AirStrike).
+            if (kind.StartsWith("Jdam") || kind == "Moab") AirStrike.Shake(x.Origin, kind);
+            else if (Config.CamFXEnabled) CameraFX.AddTrauma(x.Origin, kind == "Gun30" ? 0.08f : kind == "Gun20" ? 0.05f : kind == "Blu97" ? 0.12f : 1f);
+            // A gun run may draw only every Nth hit's effect, a cluster bomb every Nth bomblet's (AirStrike decides which).
+            if (gunHit && !AirStrike.TakeHitFx(kind)) return;
+            if (kind == "Blu97" && !AirStrike.TakeBombletFx()) return;
             // A kind without its own effect yet borrows the nearest one (the shells: the HE warhead's).
             if (!ExplosionFx.Play(kind, x.Origin, x.Forward, x.HasGround, x.Ground)
                 && !(BorrowsFx(kind, out string stand) && ExplosionFx.Play(stand, x.Origin, x.Forward, x.HasGround, x.Ground)))
@@ -178,7 +212,12 @@ namespace BombsAway
         /// <summary>The effect a kind borrows while it has none of its own in the bundle.</summary>
         private static bool BorrowsFx(string kind, out string stand)
         {
-            stand = kind == "Arty155" || kind == "Mortar81" || kind == "MissileTBX" ? "MissileHE" : null;
+            stand = kind == "Arty155" || kind == "Mortar81" || kind == "MissileTBX" || kind == "Hydra" ? "MissileHE"
+                  : kind == "Moab" ? "Jdam2000"
+                  : kind == "Blu97" ? "Hydra"
+                  : kind.StartsWith("Jdam") ? "Arty155"
+                  : kind == "Gun30" ? "Grenade"
+                  : kind == "Gun20" ? "Gun30" : null;
             return stand != null;
         }
 

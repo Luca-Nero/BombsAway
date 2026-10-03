@@ -31,6 +31,16 @@ namespace BombsAway
         /// <summary>Emission scale: below 1 for a thinner (cheaper) cloud.</summary>
         [FruitLib.MenuCategory("Smoke")] public static float SmokeDensity = 1f;
         public static float SmokeCanisterLife = 20f;   // seconds the spent can lies there after the smoke
+        // Changing the colour in hand (SmokeTerminal.cs): a DOS window beside the can reloads the
+        // dye while the band steps to the new colour.
+        /// <summary>A terminal pops up beside the can and reprograms its dye when the colour changes.</summary>
+        [FruitLib.MenuCategory("Smoke")] public static bool SmokeTerminal = true;
+        public static float SmokeRetintTime = 0.5f;    // seconds the band takes to reach the new colour (0 = at once, no window)
+        public static float SmokeTermOffsetX = 0.13f;  // the window's middle from the can's, metres in camera axes (right, up, forward)
+        public static float SmokeTermOffsetY = 0.06f;
+        public static float SmokeTermOffsetZ = 0f;
+        public static float SmokeTermWidth = 0.17f;    // metres wide (the can is about 0.43 m from the eye)
+        public static float SmokeTermYaw = 14f;        // degrees turned away from facing the eye square on (the spawn terminal too)
         // The smoke (SmokeCloud.cs, SmokePlume.cs): a plume that rises while warm, bends and drifts
         // with the wind, thins as it spreads, and is drawn as one faceted volume.
         /// <summary>Thin smoke drawn as see-through haze round the solid smoke.</summary>
@@ -221,6 +231,16 @@ namespace BombsAway
         public static float ArtyFragMaxTime = 4f;
         public static float ArtyFragImpulse = 0.2f;
         public static float RadioTypeRate = 40f;
+        // Fire support on a terminal instead of the radio net (prototype, FireTerminal.cs): the unit
+        // is spawned, a program runs the mission, and both are deleted at the end. What they say is
+        // UserData/BombsAwayTerminal.txt (TerminalScript.cs); its programs say which missions they run.
+        /// <summary>Prototype: the 155 mm HE barrage is called through a terminal that spawns its battery and runs it, instead of the radio net.</summary>
+        [FruitLib.MenuCategory("Fire Support")] public static bool ArtyTerminal = true;
+        /// <summary>Prototype: air strikes are called through the terminal too, each aircraft run by its own program.</summary>
+        [FruitLib.MenuCategory("Fire Support")] public static bool AirTerminal = true;
+        public static float ArtyTermDistance = 0.6f;   // metres from the eye the window is drawn at (its size on screen follows RadioTextSize)
+        public static float ArtyTermScale = 0.8f;      // its size against the radio log's (1 = the log's glyph size)
+        public static float ArtyTermYaw = -18f;        // degrees turned about its upright after facing the eye (negative: its outer edge toward you)
         public static float RadioTextSize = 0.85f;
 
         // The other missions (5.9.0), picked with Q / E while the binoculars are up. The 81 mm
@@ -265,6 +285,211 @@ namespace BombsAway
         public static float PrecisionFlightTime = 14f;
         public static float PrecisionDescentAngle = 84f;
         public static float PrecisionTerminalSpeed = 200f;
+
+        // Air strikes (5.11.0), the AIR page of the strip: an aircraft checks in on the net, runs
+        // in on the lased mark AirTimeOnTarget after the call and attacks it. One at a time unless
+        // ArtyStacking. AirAttackHeading -1 = across your line of sight (the hits walk past you,
+        // never toward you); 0-360 = that heading, degrees from +Z.
+        // The 30 mm gun run (A-10, GAU-8): a dive at
+        //
+        // DiveAngle, opening fire Gun30FireRange
+        // from the mark and walking Gun30Walk metres of hits through it; HEI rounds (Gun30HEIShare,
+        // 5 of 6 in the real mix) burst where they hit, the rest are armour-piercing.
+        // 5.12.0: the HEI burst made more devastating after the 5.11.0 test (a 4 s strafe ran
+        // fine): three times the charge, wounds judged at 1.5x the pressure, the blast wave's push
+        // x3, and fragments that hit harder and kick ten times as hard. Renamed (Gun30HEI*) so
+        // the old values in the ini don't hold the new defaults back.
+        [FruitLib.MenuCategory("Fire Support")] public static float Gun30Burst = 2f;
+        // The 20 mm gun run (5.12.0, F-22, M61A2): faster, a shallower dive, a shorter and denser
+        // line of smaller hits; PGU-28/B rounds, nearly all of them high-explosive.
+        [FruitLib.MenuCategory("Fire Support")] public static float Gun20Burst = 1.2f;
+        public static float AirTimeOnTarget = 18f;
+        public static float AirAttackHeading = -1f;
+        public static float AirDangerClose = 100f;
+        public static float Gun30RateOfFire = 3900f;
+        public static float Gun30Speed = 160f;
+        public static float Gun30DiveAngle = 20f;
+        public static float Gun30FireRange = 1100f;
+        public static float Gun30Walk = 40f;
+        public static float Gun30Dispersion = 5f;        // mils: 80 % of rounds land within this angle of the aim
+        public static float Gun30HEIShare = 0.83f;
+        public static float Gun30MuzzleVelocity = 1010f;
+        public static float Gun30HEIChargeKgTNT = 0.15f;   // PGU-13/B's fill isn't published (~0.05 estimated); x3 for effect
+        public static float Gun30HEIDamageScale = 1.5f;
+        public static float Gun30HEIPushScale = 1f;        // the blast wave's push, times BlastPushScale
+        public static int Gun30FragRayCount = 200;
+        public static int Gun30HEIFragPower = 2200;
+        public static float Gun30HEIFragKick = 0.5f;       // m/s each fragment hit gives what it hits, at full speed
+        public static int Gun30HEIOverpressurePoints = 8;
+        public static int Gun30FxEvery = 1;              // a hit's burst effect on every Nth HEI round (2 = half of them)
+        public static float Gun30BlastRadius = 2.5f;
+        public static float Gun30BlastForce = 1f;
+        public static float Gun30BlastUpward = 0.5f;
+        public static float Gun30OverpressureRadius = 2f;
+        public static float Gun30FragSpeed = 30f;
+        public static float Gun30FragMaxTime = 1f;
+        public static float Gun20RateOfFire = 6000f;
+        public static float Gun20Speed = 230f;
+        public static float Gun20DiveAngle = 15f;
+        public static float Gun20FireRange = 1000f;
+        public static float Gun20Walk = 25f;
+        public static float Gun20Dispersion = 6f;        // mils, as Gun30Dispersion
+        public static float Gun20HEIShare = 0.9f;
+        public static float Gun20MuzzleVelocity = 1050f;
+        public static float Gun20HEIChargeKgTNT = 0.04f;   // PGU-28/B ~0.01; scaled as the 30 mm's
+        public static float Gun20HEIDamageScale = 1.5f;
+        public static float Gun20HEIPushScale = 3f;
+        public static int Gun20FragRayCount = 100;
+        public static int Gun20HEIFragPower = 1600;
+        public static float Gun20HEIFragKick = 0.3f;
+        public static int Gun20HEIOverpressurePoints = 6;
+        public static int Gun20FxEvery = 1;
+        public static float Gun20BlastRadius = 1f;
+        public static float Gun20BlastForce = 0.7f;
+        public static float Gun20BlastUpward = 0.4f;
+        public static float Gun20OverpressureRadius = 1.5f;
+        public static float Gun20FragSpeed = 30f;
+        public static float Gun20FragMaxTime = 1f;
+
+        // JDAMs (5.13.0): a strike jet (EAGLE) runs in high and level on a bearing fixed per scene
+        // (JdamHeading, -1 = random), releases one GBU-38 / -32 / -31 JdamReleaseRange short of
+        // the mark at JdamReleaseAltitude, and the bomb steers itself down onto the mark (CEP
+        // JdamCEP), arriving steep (JdamImpactAngle) and fast. It goes off where its path first
+        // meets something, or JdamBurstHeight metres short of that along its path (an air burst).
+        // Charges are the real fills as TNT: Mk 82 89 kg, Mk 83 202 kg, Mk 84 429 kg of tritonal.
+        // FruitLib 5.7.0's per-spec reach (JdamXPushRange, JdamInjuryRange) lets their blast
+        // waves reach past the usual 40 / 60 m.
+        [FruitLib.MenuCategory("Fire Support")] public static float JdamBurstHeight = 0f;
+        public static float JdamTimeOnTarget = 26f;
+        public static float JdamHeading = -1f;
+        public static float JdamSpeed = 230f;
+        public static float JdamReleaseAltitude = 1500f;
+        public static float JdamReleaseRange = 2400f;
+        public static float JdamImpactAngle = 65f;
+        public static float JdamImpactSpeed = 300f;
+        public static float JdamCEP = 5f;
+        public static float JdamDangerClose = 400f;     // for the 2000 lb; the smaller bombs by the cube root of their charge
+        public static float JdamFallSound = 8f;
+        public static float JdamDamageScale = 1.5f;
+        public static float JdamInjuryRange = 60f;
+        // 5.14.0: the bombs aim their fragments (FruitLib 5.8.0's targeted fragments). JdamXFragments
+        // is the case's real fragment count, shared out over the limbs in reach; JdamXWorldRays
+        // (was JdamXFragRayCount, renamed so old ini values drop out) only dress the scenery.
+        public static float JdamFragBeltDeg = 30f;     // side spray: most of the case leaves square to the bomb's axis
+        public static float JdamFragBeltShare = 0.75f;
+        public static int JdamWalksPerLimb = 2;
+        public static float Jdam500ChargeKgTNT = 95f;
+        public static int Jdam500Fragments = 10000;
+        public static int Jdam500WorldRays = 300;
+        public static int Jdam500FragPower = 16000;
+        public static float Jdam500PushRange = 70f;
+        public static int Jdam500MaxWounds = 600;      // 5.13.1: the 240 of MaxWoundsPerExplosion ran out on the first few bodies
+        public static float Jdam1000ChargeKgTNT = 215f;
+        public static int Jdam1000Fragments = 18000;
+        public static int Jdam1000WorldRays = 350;
+        public static int Jdam1000FragPower = 20000;
+        public static float Jdam1000PushRange = 90f;
+        public static int Jdam1000MaxWounds = 900;
+        public static float Jdam2000ChargeKgTNT = 460f;
+        public static int Jdam2000Fragments = 30000;
+        public static int Jdam2000WorldRays = 400;
+        public static int Jdam2000FragPower = 24000;
+        public static float Jdam2000PushRange = 120f;
+        public static int Jdam2000MaxWounds = 1200;
+
+        // MOAB and CBU-87 (5.16.0): dropped as the JDAMs are (the F-15E, its heading, speed,
+        // release point and time on target), each with its own fall and burst. Since 5.22.0 the
+        // MOAB comes off an MC-130J's ramp instead: slower (MoabCarrierSpeed) and released
+        // nearer (MoabReleaseRange), at the JDAMs' height and on their heading.
+        // MOAB (GBU-43/B): 8,500 kg of H-6 (~11 t TNT) in a thin aluminium case, air-burst
+        // MoabBurstHeight over what it would hit. Its blast reaches far past anything else here:
+        // MoabPushRange caps the throw (uncapped it would sweep ~790 m), MoabInjuryRange the
+        // injuries (they stop mattering at about 95 m anyway). So low over the ground it counts
+        // as a surface burst (MoabSurfaceBurstHeight, scaled: m/kg^(1/3); FruitLib 5.10.0).
+        public static float MoabBurstHeight = 2f;
+        public static float MoabImpactAngle = 75f;
+        public static float MoabImpactSpeed = 260f;
+        public static float MoabDangerClose = 1000f;
+        public static float MoabCarrierSpeed = 75f;
+        public static float MoabReleaseRange = 1100f;
+        public static float MoabChargeKgTNT = 11000f;
+        public static float MoabSurfaceBurstHeight = 0.15f;
+        public static float MoabDamageScale = 1.2f;
+        public static float MoabPushRange = 300f;
+        public static float MoabInjuryRange = 100f;
+        public static int MoabFragments = 100000;      // calibrated to a ~150 m lethal radius, not a literal count
+        public static int MoabWorldRays = 400;
+        public static int MoabFragPower = 14000;
+        public static float MoabFragBeltDeg = 40f;
+        public static float MoabFragBeltShare = 0.7f;
+        public static int MoabWalksPerLimb = 1;
+        public static int MoabMaxWounds = 1000;
+        // CBU-87/B: a SUU-65 dispenser falls toward the mark and opens CbuOpenHeight over it;
+        // its CbuBomblets BLU-97/B bomblets are thrown out by its spin, slowed by their
+        // inflatable decelerators, and come down over a CbuPatternWidth x CbuPatternLength
+        // ellipse (across x along the run; the real one is 20 x 20 m to 120 x 240 m by height
+        // and spin) within a second or two. A CbuDudRate share don't go off: they lie live and
+        // go off when something moves them (CbuDudSensitivity m/s) or a round hits them.
+        [FruitLib.MenuCategory("Fire Support")] public static float CbuDudRate = 0.05f;
+        public static int CbuBomblets = 202;
+        public static float CbuOpenHeight = 250f;
+        public static float CbuCEP = 10f;
+        public static float CbuPatternWidth = 60f;
+        public static float CbuPatternLength = 80f;
+        public static float CbuBombletSpeed = 35f;      // m/s, falling under its decelerator
+        public static float CbuDangerClose = 300f;
+        public static float CbuDudSensitivity = 2f;
+        public static int CbuMaxDuds = 60;
+        public static int CbuBurstsPerFrame = 8;
+        public static int CbuFxEvery = 1;
+        public static float Blu97ChargeKgTNT = 0.35f;   // 287 g cyclotol 70/30, less what the cone takes
+        public static int Blu97Fragments = 300;
+        public static int Blu97WorldRays = 30;
+        public static int Blu97FragPower = 7000;        // ~2 g at ~1,000 m/s
+        public static float Blu97DamageScale = 1.3f;
+        public static int Blu97WalksPerLimb = 2;
+        public static int Blu97MaxWounds = 120;
+        public static float Blu97FragBeltDeg = 40f;
+        public static float Blu97FragBeltShare = 0.8f;
+        public static int Blu97JetRays = 6;
+        public static float Blu97JetPenetration = 0.25f;   // m of wall for free (the Javelin's 0.8)
+        public static int Blu97JetPower = 20000;
+        public static int Blu97JetSpallCount = 25;
+
+        // Rockets (5.15.0): an AH-64 (GUNFIGHTER) runs in low across your line of sight in a
+        // shallow dive and fires Hydra 70 rockets in pairs, one from each M261 pod, from
+        // RocketFireRange out, a pair every RocketPairInterval. Each flies a Mk 66 motor's burn
+        // (1.07 s to 739 m/s), then coasts under drag and gravity; unguided, so they scatter by
+        // RocketDispersion. HE (M151): 1 kg of Comp B-4 (~1.4 kg TNT) in a cast-iron body that
+        // bursts where it hits, its fragments aimed at the bodies in reach in a side-spray belt
+        // (as the bombs'); the pairs walk RocketWalk metres through the mark. Flechette
+        // (M255A1): its fuze, set by range, throws FlechetteCount steel darts of 3.9 g forward
+        // FlechetteBurstRange short of the mark, with a red marker pigment; every dart is a real
+        // FruitLib round (FruitLib 5.9.0 lifted its cap on rounds in flight for them).
+        [FruitLib.MenuCategory("Fire Support")] public static int HydraRockets = 8;
+        [FruitLib.MenuCategory("Fire Support")] public static int FlechetteRockets = 2;
+        public static float RocketRunSpeed = 55f;
+        public static float RocketDiveAngle = 8f;
+        public static float RocketFireRange = 1800f;
+        public static float RocketPairInterval = 0.3f;
+        public static float RocketDispersion = 3f;      // mils: 80 % of rockets land within this angle of their aim
+        public static float RocketWalk = 30f;
+        public static float RocketDangerClose = 150f;
+        public static float HydraChargeKgTNT = 1.4f;    // 1.04 kg Comp B-4 x ~1.33
+        public static int HydraFragments = 2500;
+        public static int HydraWorldRays = 150;
+        public static int HydraFragPower = 3000;
+        public static float HydraDamageScale = 1.3f;
+        public static int HydraWalksPerLimb = 2;
+        public static int HydraMaxWounds = 300;
+        public static float HydraFragBeltDeg = 40f;
+        public static float HydraFragBeltShare = 0.7f;
+        public static float FlechetteBurstRange = 150f;
+        public static int FlechetteCount = 1179;
+        public static float FlechettePatternRadius = 15f;   // m: the darts land evenly over this round where the rocket would have (5.15.1)
+        public static float FlechetteConeDeg = 6f;      // half-angle of the free cone: only with FlechettePatternRadius 0, or a rocket that hits early
+        public static float FlechettePowerScale = 1f;
+        public static int FlechetteHitFxEvery = 3;
 
         // ── Detonation ────────────────────────────────────────────────────────────
         // Shooting a live charge sets it off; an explosion sets off charges its fragments reach
@@ -335,6 +560,17 @@ namespace BombsAway
         // First-person model while a grenade or C4 is selected. Pose in the camera's axes
         // (metres right/up/forward, degrees) relative to the game's item pivot.
         [FruitLib.MenuCategory("Effects")] public static bool ShowHeldModels = true;
+        // Equipping as a spawn (prototype, SpawnTerminal.cs): a terminal beside the hand runs
+        // SPAWN BA:<ITEM> while the item is fought into existence texel by texel.
+        /// <summary>Prototype: equipping spawns the item into view from a terminal instead of raising it.</summary>
+        [FruitLib.MenuCategory("Effects")] public static bool SpawnTerminal = true;
+        public static float SpawnTime = 0.6f;          // seconds the item takes to fight its way into existence
+        public static float DespawnTime = 0.35f;       // seconds a put-away item takes to dissolve into bytes
+        public static float SpawnSettleLift = 0.012f;  // metres the item hovers over the hand while it spawns, before it drops in
+        public static float SpawnSettleSway = 120f;    // degrees a second of sway the hand gives it as it settles
+        public static float SpawnTermOffsetX = 0.13f;  // the spawn window's middle from the item pivot, metres in camera axes
+        public static float SpawnTermOffsetY = 0.06f;
+        public static float SpawnTermOffsetZ = 0f;
         // A launcher's HEAT / HE stencil: retyped at a DOS cursor, or (on) glitched into the other word.
         [FruitLib.MenuCategory("Effects")] public static bool WarheadLabelGlitch = false;
         // Every BombsAway sound (Effects/Sfx.cs); 0 is silent.
@@ -445,6 +681,14 @@ namespace BombsAway
         [FruitLib.MenuCategory("Effects")] public static bool CamFXEnabled = true;
         [FruitLib.MenuCategory("Effects")] public static float CamFXIntensity = 1f;
         [FruitLib.MenuCategory("Effects")] public static float VFXIntensity = 1f;
+        // A blast's shock front as a ring of bent light racing out from it (Shockwave).
+        [FruitLib.MenuCategory("Effects")] public static bool Shockwave = true;
+        [FruitLib.MenuCategory("Effects")] public static float ShockwaveStrength = 1f;
+        public static float ShockwaveMinCharge = 0.5f;  // kg TNT: smaller blasts show none (a hand grenade's front is gone in two frames)
+        public static float ShockwaveFadeKPa = 4f;      // the front fades out as its overpressure falls to this
+        public static float ShockwaveGlint = 0.12f;     // the pale line along the front, so it shows against plain sky
+        public static int ShockwaveMax = 16;            // fronts drawn at once (the oldest goes first)
+        public static bool ShockwaveRefract = true;     // false: only the pale ring, never the opaque texture
         public static float DebrisRaysRatio = 0.04f;
         public static int DebrisMaxPerExplosion = 24;
         public static float DebrisMeshScale = 0.04f;

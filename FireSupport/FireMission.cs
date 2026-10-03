@@ -8,8 +8,8 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace BombsAway
 {
-    /// <summary>What the binoculars call in, in the order Q / E step through them.</summary>
-    internal enum FireMissionType { Arty155, Mortar81, Smoke155, Illum155, Precision155 }
+    /// <summary>What the binoculars call in (append only: <see cref="FireMission"/> sets the order Q / E step through them).</summary>
+    internal enum FireMissionType { Arty155, Mortar81, Smoke155, Illum155, Precision155, Gun30, Gun20, Jdam500, Jdam1000, Jdam2000, Hydra, Flechette, Moab, Cbu87 }
 
     /// <summary>
     /// Fire missions called from the binoculars' laser rangefinder. Two firing units off the map
@@ -56,8 +56,15 @@ namespace BombsAway
             public float WakeRadius = 0.9f;
         }
 
+        // Three pages on the strip: ARTY, AIR (guns and rockets), BOMB; Q / E run through all of them in one loop.
         private static readonly FireMissionType[] Order =
-            { FireMissionType.Arty155, FireMissionType.Mortar81, FireMissionType.Smoke155, FireMissionType.Illum155, FireMissionType.Precision155 };
+            { FireMissionType.Arty155, FireMissionType.Mortar81, FireMissionType.Smoke155, FireMissionType.Illum155, FireMissionType.Precision155,
+              FireMissionType.Gun30, FireMissionType.Gun20, FireMissionType.Hydra, FireMissionType.Flechette,
+              FireMissionType.Jdam500, FireMissionType.Jdam1000, FireMissionType.Jdam2000, FireMissionType.Cbu87, FireMissionType.Moab };
+        private static readonly string[] PageNames = { "ARTY", "AIR", "BOMB" };
+
+        /// <summary>Air strikes (AirStrike) rather than the guns and mortars.</summary>
+        public static bool IsAir(FireMissionType t) => t >= FireMissionType.Gun30;
 
         private static Profile For(FireMissionType t)
         {
@@ -129,6 +136,8 @@ namespace BombsAway
             public string Grid;
             public float CalledAt, AckAt, ShotAt, FirstImpact, LastImpact;
             public bool Acked, Shot, Splashed, Complete;
+            public TermSession Term;               // run on the terminal (FireTerminal) instead of the radio net
+            public Vector3 Guns;                   // on the terminal: where the unit was spawned
             public readonly List<Round> Shells = new List<Round>();
         }
 
@@ -165,17 +174,45 @@ namespace BombsAway
 
         public static int TypeCount => Order.Length;
         public static int Index => System.Array.IndexOf(Order, Type);
-        public static string CodeAt(int i) => For(Order[i]).Code;
+        public static string CodeAt(int i) => IsAir(Order[i]) ? AirStrike.Code(Order[i]) : For(Order[i]).Code;
+
+        /// <summary>
+        /// The strip's slots for <paramref name="slots"/>, in its pixels: 23 wide with a 2 gap, a
+        /// longer code's slot as wide as it needs (MOAB: 27). A page too full for that (more than
+        /// 174 between the keys) gets each code's own width plus a pixel of margin and the outline
+        /// either side, with a 1 gap.
+        /// </summary>
+        public static int[] SlotWidths(System.Collections.Generic.List<int> slots, out int gap, out int total)
+        {
+            const int Wide = 23, WideGap = 2, MaxTotal = 174;
+            int n = slots.Count;
+            var w = new int[n];
+            gap = WideGap;
+            total = (n - 1) * WideGap;
+            for (int j = 0; j < n; j++) total += w[j] = Mathf.Max(Wide, CodeWidth(slots[j]));
+            if (total <= MaxTotal) return w;
+            gap = 1; total = (n - 1) * gap;
+            for (int j = 0; j < n; j++) total += w[j] = CodeWidth(slots[j]);
+            return w;
+        }
+
+        private static int CodeWidth(int i) => CodeAt(i).Length * (PixelFont.GW + 1) - 1 + 4;
         public static FireMissionType TypeAt(int i) => Order[i];
 
+        /// <summary>The strip's pages: 0 ARTY, 1 AIR (guns and rockets), 2 BOMB.</summary>
+        public static int PageCount => PageNames.Length;
+        public static int PageOf(int i) => AirStrike.IsBomb(Order[i]) ? 2 : IsAir(Order[i]) ? 1 : 0;
+        public static string PageName(int page) => PageNames[page];
+        public static int Page => PageOf(Index);
+
         /// <summary>The chosen type's full name ("155MM HE").</summary>
-        public static string TypeName => For(Type).Name;
+        public static string TypeName => IsAir(Type) ? AirStrike.Name(Type) : For(Type).Name;
 
-        /// <summary>Rounds the chosen type fires.</summary>
-        public static int Rounds => For(Type).Rounds;
+        /// <summary>Rounds the chosen type fires (an air strike: one pass).</summary>
+        public static int Rounds => IsAir(Type) ? 1 : For(Type).Rounds;
 
-        /// <summary>"155MM HE  6 RDS": the line under the strip.</summary>
-        public static string Describe => $"{TypeName}  {Rounds} {(Rounds == 1 ? "RD" : "RDS")}";
+        /// <summary>"155MM HE  6 RDS", "30MM GUN  2.0S": the line under the strip.</summary>
+        public static string Describe => IsAir(Type) ? AirStrike.Describe(Type) : $"{TypeName}  {Rounds} {(Rounds == 1 ? "RD" : "RDS")}";
 
         /// <summary>Steps the mission type: -1 back (Q), +1 on (E), wrapping round.</summary>
         public static void Step(int dir)
@@ -187,16 +224,17 @@ namespace BombsAway
         }
 
         /// <summary>A mission of this type is in the air.</summary>
-        public static bool Running(FireMissionType t) => _missions.Exists(m => !m.Complete && m.P.Type == t);
+        public static bool Running(FireMissionType t) => IsAir(t) ? AirStrike.Running(t) : _missions.Exists(m => !m.Complete && m.P.Type == t);
 
         private static bool Busy(Unit u) => _missions.Exists(m => !m.Complete && m.P.Unit == u);
 
-        /// <summary>The newest running mission's mark.</summary>
+        /// <summary>The newest running mission's mark, a fire mission's or an air strike's.</summary>
         public static bool TryMark(out Vector3 mark, out string status)
         {
             mark = default; status = null;
             Mission m = null;
             for (int i = _missions.Count - 1; i >= 0; i--) if (!_missions[i].Complete) { m = _missions[i]; break; }
+            if (AirStrike.TryMark(m != null ? m.Number : 0, out mark, out status)) return true;
             if (m == null) return false;
             mark = m.Mark;
             float now = Time.time;
@@ -212,12 +250,24 @@ namespace BombsAway
         /// <summary>The lase is complete: call the chosen mission on <paramref name="mark"/>. False if its unit is busy.</summary>
         public static bool Call(Vector3 mark, Vector3 observer)
         {
+            if (IsAir(Type)) return AirStrike.Call(Type, mark, observer);
             var p = For(Type);
             string rds = $"{p.Prefix}{p.Rounds} {(p.Rounds == 1 ? "rd" : "rds")} {p.Ammo}";
+            // Without a crew: a terminal spawns the unit (prototype, ArtyTerminal), for each mission
+            // the terminal script has a program for (the 155 HE barrage in the default script).
+            bool term = Config.ArtyTerminal && TerminalScript.For(p.Code) != null && FireTerminal.Available;
             if (!Config.ArtyStacking && Busy(p.Unit))
             {
-                RadioLog.Observer($"Fire mission. Grid {Grid(mark)}. {rds}. Over.");
-                RadioLog.Unit(Sign(p.Unit), "Unable, mission in progress. Out.");
+                var call = new Dictionary<string, string>
+                {
+                    ["GRID"] = Grid(mark), ["N"] = p.Rounds.ToString(), ["NWORD"] = FireTerminal.Word(p.Rounds),
+                    ["AMMO"] = p.Ammo.ToUpperInvariant(), ["WEAPON"] = p.Name,
+                };
+                if (!(term && FireTerminal.Refuse(LiveTerm(p.Unit), p.Code, call)))
+                {
+                    RadioLog.Observer($"Fire mission. Grid {Grid(mark)}. {rds}. Over.");
+                    RadioLog.Unit(Sign(p.Unit), "Unable, mission in progress. Out.");
+                }
                 return false;
             }
 
@@ -228,9 +278,28 @@ namespace BombsAway
                 _bearing[u] = set >= 0f ? set : Random.Range(0f, 360f);
             }
             float now = Time.time;
-            var m = new Mission { Number = ++_count, P = p, Mark = mark, Grid = Grid(mark), CalledAt = now };
-            m.ShotAt = now + Mathf.Max(1f, Config.ArtyShotDelay);
-            m.AckAt = now + Mathf.Max(1f, Config.ArtyShotDelay) * 0.5f;
+            var m = new Mission { Number = NextNumber(), P = p, Mark = mark, Grid = Grid(mark), CalledAt = now };
+            bool he = p.Payload == Payload.HE155 || p.Payload == Payload.HE81;
+            bool danger = he && Vector3.Distance(mark, observer) < Config.ArtyDangerClose;
+
+            // On the terminal the unit is spawned first, out on the side its rounds come from (the
+            // guns 9 to 15 km, the mortars 1.5 to 3), and the call is made once its program is up:
+            // the timeline starts there.
+            float lead = 0f;
+            if (term) m.Term = FireTerminal.Begin(p.Code, danger);
+            if (m.Term != null)
+            {
+                bool mortars = p.Unit == Unit.Mortars;
+                float b = _bearing[u] * Mathf.Deg2Rad, range = mortars ? Random.Range(1500f, 3000f) : Random.Range(9000f, 15000f);
+                m.Guns = mark + new Vector3(Mathf.Sin(b), 0f, Mathf.Cos(b)) * range;
+                int az = Mathf.RoundToInt((_bearing[u] + 180f) % 360f * 6400f / 360f) % 6400;   // guns to the mark, mils
+                m.Term.Set("GRID", m.Grid).Set("SPAWN", Grid(m.Guns)).Set("RANGE", range / 1000f).Set("AZ", az.ToString("0000"))
+                      .Set("N", p.Rounds).Set("NWORD", FireTerminal.Word(p.Rounds)).Set("AMMO", p.Ammo).Set("WEAPON", p.Name)
+                      .Set("CRAFT", mortars ? "M252" : "M777A2").Set("SIGN", Sign(p.Unit));
+                lead = FireTerminal.Play(m.Term, "spawn", "boot", "wake", "call");
+            }
+            m.ShotAt = now + lead + Mathf.Max(1f, Config.ArtyShotDelay);
+            m.AckAt = now + lead + Mathf.Max(1f, Config.ArtyShotDelay) * 0.5f;
             m.FirstImpact = m.ShotAt + Mathf.Max(Config.ArtySplashWarning + 0.5f, p.Flight);
 
             for (int i = 0; i < p.Rounds; i++)
@@ -241,15 +310,24 @@ namespace BombsAway
             }
             _missions.Add(m);
 
-            bool he = p.Payload == Payload.HE155 || p.Payload == Payload.HE81;
-            bool danger = he && Vector3.Distance(mark, observer) < Config.ArtyDangerClose;
-            RadioLog.Observer($"Fire mission. Grid {m.Grid}. {(danger ? "Danger close. " : "")}{rds}. Over.");
+            if (m.Term == null) RadioLog.Observer($"Fire mission. Grid {m.Grid}. {(danger ? "Danger close. " : "")}{rds}. Over.");
             if (Config.Dbg1) MelonLogger.Msg($"[Arty] mission {m.Number} ({p.Code}) at {mark} grid {m.Grid}, {p.Rounds} rounds, bearing {_bearing[u]:F0}, first impact in {m.FirstImpact - now:F1}s");
             return true;
         }
 
+        /// <summary>The terminal session of <paramref name="unit"/>'s newest running mission, if it is on the terminal.</summary>
+        private static TermSession LiveTerm(Unit unit)
+        {
+            for (int i = _missions.Count - 1; i >= 0; i--)
+                if (!_missions[i].Complete && _missions[i].P.Unit == unit) return _missions[i].Term;
+            return null;
+        }
+
+        /// <summary>Missions are numbered in one series, fire missions and air strikes alike.</summary>
+        internal static int NextNumber() => ++_count;
+
         /// <summary>An 8-figure grid: metres east and north on a 100 km square, to 10 m.</summary>
-        private static string Grid(Vector3 p)
+        internal static string Grid(Vector3 p)
         {
             int e = Mathf.FloorToInt((p.x + 50000f) / 10f) % 10000;
             int n = Mathf.FloorToInt((p.z + 50000f) / 10f) % 10000;
@@ -280,6 +358,7 @@ namespace BombsAway
         {
             float now = Time.time;
             TickWhistles(now);
+            AirStrike.Tick();
             SmokeShells.Tick();
             IllumFlares.Tick();
             for (int mi = _missions.Count - 1; mi >= 0; mi--)
@@ -289,13 +368,18 @@ namespace BombsAway
                 if (!m.Acked && now >= m.AckAt)
                 {
                     m.Acked = true;
-                    RadioLog.Unit(sign, $"Grid {m.Grid}, {m.P.Prefix}{m.P.Rounds} {(m.P.Rounds == 1 ? "rd" : "rds")} {m.P.Ammo}. Out.");
+                    if (m.Term != null) FireTerminal.Play(m.Term, "readback");
+                    else RadioLog.Unit(sign, $"Grid {m.Grid}, {m.P.Prefix}{m.P.Rounds} {(m.P.Rounds == 1 ? "rd" : "rds")} {m.P.Ammo}. Out.");
                 }
                 if (!m.Shot && now >= m.ShotAt)
                 {
                     m.Shot = true;
-                    RadioLog.Unit(sign, "Shot. Over.");
-                    RadioLog.Observer("Shot. Out.");
+                    if (m.Term != null) FireTerminal.Play(m.Term, "shot");
+                    else
+                    {
+                        RadioLog.Unit(sign, "Shot. Over.");
+                        RadioLog.Observer("Shot. Out.");
+                    }
                     // The guns (or tubes), far off: each fires as its round's offset says.
                     foreach (var r in m.Shells)
                     {
@@ -306,8 +390,12 @@ namespace BombsAway
                 if (!m.Splashed && now >= m.FirstImpact - Config.ArtySplashWarning)
                 {
                     m.Splashed = true;
-                    RadioLog.Unit(sign, "Splash. Over.");
-                    RadioLog.Observer("Splash. Out.");
+                    if (m.Term != null) FireTerminal.Play(m.Term, "splash", "kill", "last", "free");   // and the unit is deleted
+                    else
+                    {
+                        RadioLog.Unit(sign, "Splash. Over.");
+                        RadioLog.Observer("Splash. Out.");
+                    }
                 }
 
                 bool allDone = true;
@@ -327,10 +415,13 @@ namespace BombsAway
                 if (allDone && !m.Complete && now >= m.LastImpact + CompleteAfter)
                 {
                     m.Complete = true;
-                    RadioLog.Unit(sign, "Rounds complete. Over.");
-                    RadioLog.Observer(m.P.Payload == Payload.Smoke ? "Smoke on target. End of mission. Out."
-                                    : m.P.Payload == Payload.Illum ? "Illumination on target. End of mission. Out."
-                                    : "End of mission. Out.");
+                    if (m.Term == null)   // on the terminal the unit was deleted at SPLASH
+                    {
+                        RadioLog.Unit(sign, "Rounds complete. Over.");
+                        RadioLog.Observer(m.P.Payload == Payload.Smoke ? "Smoke on target. End of mission. Out."
+                                        : m.P.Payload == Payload.Illum ? "Illumination on target. End of mission. Out."
+                                        : "End of mission. Out.");
+                    }
                     _missions.RemoveAt(mi);
                 }
             }
@@ -488,7 +579,7 @@ namespace BombsAway
         }
 
         /// <summary>The first solid thing along a path (never triggers or ignore-raycast parts).</summary>
-        private static bool PathHit(Vector3 from, Vector3 dir, float length, out Vector3 point, out Vector3 normal)
+        internal static bool PathHit(Vector3 from, Vector3 dir, float length, out Vector3 point, out Vector3 normal)
         {
             point = default; normal = Vector3.up;
             if (length <= 0f) return false;
@@ -554,12 +645,15 @@ namespace BombsAway
             _whistles.Clear();
             SmokeShells.Clear();
             IllumFlares.Clear();
+            AirStrike.Clear();
+            FireTerminal.Clear();
         }
 
         public static void OnScene()
         {
             Clear();
             _bearing[0] = _bearing[1] = -1f;
+            AirStrike.OnScene();
         }
     }
 }

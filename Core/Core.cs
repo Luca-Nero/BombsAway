@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.10.0";
+        public const string Version = "5.24.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -35,7 +35,7 @@ namespace BombsAway
 
         // ── FruitLib dependency ──────────────────────────────────────────────
         // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
-        private const int LibMajor = 5, LibMinor = 6, LibPatch = 0;
+        private const int LibMajor = 5, LibMinor = 10, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()
@@ -58,7 +58,8 @@ namespace BombsAway
             // Before the ini is read, so Reset to Defaults goes back to the code's values.
             FruitMenu.CaptureDefaults(typeof(Config));
             ConfigLoader.Load();
-            Meshes = new FruitMeshLibrary(System.Reflection.Assembly.GetExecutingAssembly());
+            TerminalScript.Refresh();   // writes UserData/BombsAwayTerminal.txt if it's missing, so it can be edited before the first call
+            Meshes =new FruitMeshLibrary(System.Reflection.Assembly.GetExecutingAssembly());
             ExplosionSystem.Init();
             FruitMenu.Register("BombsAway", ConfigLoader.IniPath, typeof(Config), ConfigLoader.Write);
             FruitHud.Register("BombsAway", BuildHud, order: 10);
@@ -99,6 +100,7 @@ namespace BombsAway
             TickBinoculars(Time.deltaTime);
             FireMission.Tick();
             RadioLog.Tick();
+            FireTerminal.Tick();
 
             if (!FruitMenu.IsInputSuppressed)
             {
@@ -317,6 +319,7 @@ namespace BombsAway
             CameraFX.Tick(Time.deltaTime);
             VfxRunner.Tick(Time.deltaTime);
             ExplosionFx.Tick();
+            Shockwave.Tick();
             SmokeCloud.TickAll();   // after the particle systems have run: the cloud writes its puffs over them
             Sfx.Tick();
         }

@@ -36,6 +36,8 @@
     <EmbeddedResource Include="Meshes\TAG19_mesh.json" />
     <!-- Built in E:\Dev\Unity\BombsAwayBundle (FruitLib > Build Bundles, copy BundlesOut\bombsaway here). -->
     <EmbeddedResource Include="Bundles\bombsaway.bundle" />
+    <!-- The terminal's default script; written to UserData\BombsAwayTerminal.txt when that's missing (TerminalScript.cs). -->
+    <EmbeddedResource Include="FireSupport\TerminalScript.txt" LogicalName="BombsAway.TerminalScript.txt" />
     <EmbeddedResource Include="Icons\Grenade.png" />
     <EmbeddedResource Include="Icons\C4.png" />
     <EmbeddedResource Include="Icons\Claymore.png" />

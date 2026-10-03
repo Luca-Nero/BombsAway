@@ -108,22 +108,47 @@ namespace BombsAway
         /// <summary>The mission strip, as on the screen (LrfDisplay): a slot per type, the chosen one solid.</summary>
         private static void DrawStrip(in LrfState s, float cx, float y, float px, Color led, Color dim)
         {
-            const int SlotW = 23, SlotH = 11, Gap = 2;
-            int n = FireMission.TypeCount;
-            float total = (n * SlotW + (n - 1) * Gap) * px, x0 = Mathf.Round(cx - total * 0.5f);
-            for (int i = 0; i < n; i++)
+            const int SlotH = 11;
+            int page = s.MissionIndex >= 0 ? FireMission.PageOf(s.MissionIndex) : 0;
+            var slots = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < FireMission.TypeCount; i++) if (FireMission.PageOf(i) == page) slots.Add(i);
+            int n = slots.Count;
+            var widths = FireMission.SlotWidths(slots, out int gap, out int totalPx);
+            float total = totalPx * px, x0 = Mathf.Round(cx - total * 0.5f);
+            // The pages in a row over it (ARTY, AIR, BOMB), the shown one lit, as on the screen.
+            const int TabGap = 8;
+            int tabs = (FireMission.PageCount - 1) * TabGap;
+            for (int pg = 0; pg < FireMission.PageCount; pg++) tabs += FireMission.PageName(pg).Length * (PixelFont.GW + 1) - 1;
+            float tx = Mathf.Round(cx - tabs * 0.5f * px), ty = y - (PixelFont.GH + 4) * px;
+            for (int pg = 0; pg < FireMission.PageCount; pg++)
             {
-                float x = x0 + i * (SlotW + Gap) * px;
+                string name = FireMission.PageName(pg);
+                int w = name.Length * (PixelFont.GW + 1) - 1;
+                PixelFont.DrawCentred(name, tx + w * 0.5f * px, ty, px, pg == page ? led : dim);
+                if (pg != page && PageRunning(pg)) PixelFont.Box(tx + (w / 2 - 2) * px, ty + (PixelFont.GH + 1) * px, 5f * px, px, led);
+                tx += (w + TabGap) * px;
+            }
+            float x = x0;
+            for (int j = 0; j < n; x += (widths[j] + gap) * px, j++)
+            {
+                int i = slots[j], sw = widths[j];
                 string code = FireMission.CodeAt(i);
                 bool chosen = i == s.MissionIndex;
-                if (chosen) PixelFont.Box(x, y, SlotW * px, SlotH * px, led);
-                else Outline(x, y, SlotW * px, SlotH * px, px, dim);
-                PixelFont.DrawCentred(code, x + (SlotW * 0.5f + 0.5f) * px, y + 2f * px, px, chosen ? new Color(0.02f, 0.02f, 0.03f, led.a) : dim);
-                if (FireMission.Running(FireMission.TypeAt(i))) PixelFont.Box(x + (SlotW / 2 - 2) * px, y + (SlotH + 1) * px, 5f * px, px, led);
+                if (chosen) PixelFont.Box(x, y, sw * px, SlotH * px, led);
+                else Outline(x, y, sw * px, SlotH * px, px, dim);
+                PixelFont.DrawCentred(code, x + (sw * 0.5f + 0.5f) * px, y + 2f * px, px, chosen ? new Color(0.02f, 0.02f, 0.03f, led.a) : dim);
+                if (FireMission.Running(FireMission.TypeAt(i))) PixelFont.Box(x + (sw / 2 - 2) * px, y + (SlotH + 1) * px, 5f * px, px, led);
             }
             bool lit = Time.unscaledTime - FireMission.SwitchedAt < 0.25f;
             PixelFont.DrawCentred(Config.MissionPrevKey.ToString(), x0 - 9f * px, y + 2f * px, px, lit && FireMission.SwitchedDir < 0 ? led : dim);
             PixelFont.DrawCentred(Config.MissionNextKey.ToString(), x0 + total + 9f * px, y + 2f * px, px, lit && FireMission.SwitchedDir > 0 ? led : dim);
+        }
+
+        private static bool PageRunning(int page)
+        {
+            for (int i = 0; i < FireMission.TypeCount; i++)
+                if (FireMission.PageOf(i) == page && FireMission.Running(FireMission.TypeAt(i))) return true;
+            return false;
         }
 
         /// <summary>The point being lased: four LED corners round it, so the eye can bring the reticle back.</summary>

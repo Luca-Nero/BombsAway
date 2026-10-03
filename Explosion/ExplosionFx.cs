@@ -11,8 +11,8 @@ namespace BombsAway
     /// FX_Grenade), authored and tuned in the Unity project (Assets/BombsAway/FX, the voxel kit
     /// in FX/_Kit). This only places and plays them; what they look and sound like lives in the
     /// prefab. Its children are read by name:
-    ///   Ground*  only when the blast is within GroundReach of the ground under it; moved onto
-    ///            the ground there and turned to its normal
+    ///   Ground*  only when the blast is within GroundReach of the ground under it (more for a
+    ///            MOAB's low air burst); moved onto the ground there and turned to its normal
     ///   Aim*     turned to the blast's forward (a claymore's fan, a HEAT jet, C4 off its
     ///            surface); AimBack* the other way (the claymore's rear puff)
     ///   Sound*   AudioSources (Play On Awake off): played through Sfx, late by the distance over
@@ -47,7 +47,8 @@ namespace BombsAway
             var root = go.GetComponent<ParticleSystem>();
             if (root != null) root.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
-            bool onGround = hasGround && origin.y - ground.point.y <= GroundReach;
+            // A MOAB bursts a couple of metres up, and its dust, stem and shock ring are on the ground all the same.
+            bool onGround = hasGround && origin.y - ground.point.y <= (kind == "Moab" ? 15f : GroundReach);
             var cam = Camera.main;
             float delay = cam != null ? Vector3.Distance(cam.transform.position, origin) / SpeedOfSound : 0f;
 

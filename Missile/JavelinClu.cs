@@ -255,6 +255,7 @@ namespace BombsAway
                 int mask = hot ? _cam.cullingMask & ~smoke : _cam.cullingMask | smoke;
                 if (mask != _cam.cullingMask) _cam.cullingMask = mask;
             }
+            Shockwave.Admit(_cam);   // shock fronts, while one is out
 
             if (ads > 0.05f) _cam.enabled = true;
             else

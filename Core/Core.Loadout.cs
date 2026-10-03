@@ -177,7 +177,7 @@ namespace BombsAway
             Selected = o;
             Equipped = true;
             if (HasHeldModel(o)) AttachHeld(held != null ? held.transform : null, o);
-            else                 DetachHeld();
+            else                 DetachHeld(despawn: Config.SpawnTerminal);
             if (Config.Dbg1) MelonLogger.Msg($"[Loadout] {o} equipped (slot {slot + 1}){(swap ? " over another ordnance" : "")}");
         }
 
@@ -186,7 +186,7 @@ namespace BombsAway
             // The late deselect of the ordnance just swapped out: the new one is already in hand.
             if (!Equipped || Selected != o) return;
             Equipped = false;
-            DetachHeld();
+            DetachHeld(despawn: Config.SpawnTerminal);
             // Stop the hologram now, not next frame: the tool being switched to may start its
             // own placement on the same shared service before our Update runs again.
             StopHologram();
@@ -205,6 +205,7 @@ namespace BombsAway
             BinocularView.OnScene();
             FireMission.OnScene();
             RadioLog.Clear();
+            FireTerminal.Clear();
             _rocketReadyAt = 0f;
         }
 
@@ -229,6 +230,7 @@ namespace BombsAway
         internal static void ClearAllCharges()
         {
             SmokeCloud.ClearAll();
+            Shockwave.Clear();
             foreach (var g in _grenades)
             {
                 if (g.Obj != null) GameObject.Destroy(g.Obj);

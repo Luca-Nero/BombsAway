@@ -110,13 +110,19 @@ namespace BombsAway
 
         private static void AttachHeld(Transform parent, Ordnance kind)
         {
-            DetachHeld();
+            DetachHeld(despawn: Config.SpawnTerminal);
             _heldParent = parent;
             _heldKind = kind;
             if (parent == null || !Config.ShowHeldModels) return;
             // Still reloading after the last shot: the fresh tube comes up when it is nearly done.
             if (kind == Ordnance.Rocket && !RocketReady) _rearmAt = Mathf.Max(Time.time, _rocketReadyAt - Config.RaiseTime - AT4ArmTime);
-            else SpawnHeld(raise: true);
+            else
+            {
+                // Equipping: spawned into view from the command line, or risen into it.
+                bool spawn = Config.SpawnTerminal;
+                SpawnHeld(raise: !spawn);
+                if (spawn) BeginSpawnFx();
+            }
         }
 
         /// <summary>What a launcher made for itself: the CLU's cameras and textures, the label's texture.</summary>
@@ -133,17 +139,26 @@ namespace BombsAway
 
         private static string WarheadText => MissileWarheadMode.ToString();   // "HEAT", "HE", "TBX"
 
-        private static void DetachHeld()
+        /// <param name="despawn">Put away from the command line: the model dissolves into bytes (SpawnTerminal) instead of vanishing.</param>
+        private static void DetachHeld(bool despawn = false)
         {
             _ads = 0f;
             AdsBlur.Set(0f);
             _stage = ThrowStage.None;
             _rearmAt = -1f;
             _spentAt = -1f;
-            if (_held != null) Object.Destroy(_held);
+            bool despawned = false;
+            if (_held != null && despawn)
+            {
+                if (_heldKind == Ordnance.Smoke) TintBand(_held.transform, SmokeColour);   // no dye fight's texture left on the band
+                despawned = DespawnHeld();
+            }
+            if (_held != null && !despawned) Object.Destroy(_held);
             _held = null;
             _heldPin = _heldSpoon = null;
             _rig = null; _clay = null; DropLauncherParts();
+            _smokeTerm.Dispose();
+            if (!despawned) _spawnTerm.Dispose();
             _heldParent = null;
         }
 
@@ -209,6 +224,9 @@ namespace BombsAway
             _kick = _kickVel = Vector3.zero;
             _heldHome = toCam * offset / s;
             _heldLowered = _heldHome + toCam * new Vector3(0f, -RaiseDrop, 0f) / s;
+            _heldUp = toCam * Vector3.up / s;
+            _settle = _settleVel = 0f;
+            _settleHold = false;
             _raise = raise ? 0f : 1f;
             ApplyRaise();
 
@@ -282,7 +300,7 @@ namespace BombsAway
         {
             if (_heldParent == null || !Config.ShowHeldModels) return false;
             if (_held == null) return _rearmAt >= 0f;
-            if (ThrowAnimating || _raise < 1f) return true;
+            if (ThrowAnimating || _raise < 1f || Spawning) return true;
 
             _looseThisThrow.Clear();
             _placing = placeAt.HasValue;
@@ -627,6 +645,7 @@ namespace BombsAway
             }
 
             if (_raise < 1f) _raise = Mathf.Clamp01(_raise + dt / Mathf.Max(0.01f, Config.RaiseTime));
+            TickSettle(dt);
             ApplyRaise();   // every frame: LateUpdate may have moved it up to the eye
 
             // Right mouse: the Javelin's CLU display, or the AT-4's sights, up to the eye.
@@ -659,6 +678,8 @@ namespace BombsAway
         /// </summary>
         private static void LateTickHeld()
         {
+            TickSmokeTerminal();
+            TickSpawnTerminal();
             if (_held == null) { if (_ads > 0f) { _ads = 0f; AdsBlur.Set(0f); } return; }
             if (HeldPose(out Vector3 pos, out Quaternion rot)) _held.transform.SetPositionAndRotation(pos, rot);
             // Screens blur the world round them; iron sights have nothing to blur around.
@@ -807,13 +828,13 @@ namespace BombsAway
         /// <summary>The AT-4 in hand can fire: up and not yet spent (or there is no model to wait for).</summary>
         private static bool RocketInHand =>
             !Config.ShowHeldModels || _heldParent == null || !HasHeldModel(Ordnance.Rocket)
-            || (_heldKind == Ordnance.Rocket && _held != null && _raise >= 1f && _spentAt < 0f && AT4Armed);
+            || (_heldKind == Ordnance.Rocket && _held != null && _raise >= 1f && !Spawning && _spentAt < 0f && AT4Armed);
 
         private static void ApplyRaise()
         {
             if (_held == null) return;
             float e = 1f - (1f - _raise) * (1f - _raise);   // ease out
-            _held.transform.localPosition = Vector3.LerpUnclamped(_heldLowered, _heldHome, e);
+            _held.transform.localPosition = Vector3.LerpUnclamped(_heldLowered, _heldHome, e) + _heldUp * _settle;
         }
 
         /// <summary>The nearest rotation made only of 90 degree steps.</summary>
