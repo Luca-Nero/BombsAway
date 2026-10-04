@@ -82,7 +82,6 @@ namespace BombsAway
             ['&'] = ".##.. #..#. #.#.. .#... #.#.# #..#. .##.#",
             ['$'] = "..#.. .#### #.#.. .###. ..#.# ####. ..#..",
             ['@'] = ".###. #...# #.### #.#.# #.### #.... .###.",
-            ['\''] = "..#.. ..#.. .#... ..... ..... ..... .....",
         };
 
         private static readonly Dictionary<char, Texture2D> _tex = new Dictionary<char, Texture2D>();
@@ -164,12 +163,6 @@ namespace BombsAway
             GUI.color = c;
             GUI.DrawTexture(new Rect(Mathf.Round(x), Mathf.Round(y), Mathf.Max(1f, Mathf.Round(w)), Mathf.Max(1f, Mathf.Round(h))), White);
             GUI.color = prev;
-        }
-
-        public static void Clear()
-        {
-            foreach (var t in _tex.Values) if (t != null) Object.Destroy(t);
-            _tex.Clear();
         }
     }
 }

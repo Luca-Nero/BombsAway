@@ -44,7 +44,7 @@ namespace BombsAway
         private Mesh _spotMesh, _diamondMesh;
         private Transform _spot, _diamond;
         private float _hudW, _hudH;
-        private string _drawnKey;
+        private long? _drawnKey;
         private float _nextIdleFrame;
         private string _typedLine;                                // the mission line being typed, and since when
         private float _typedAt = -10f;
@@ -171,7 +171,7 @@ namespace BombsAway
                 if (due) _nextIdleFrame = Time.unscaledTime + 1f / IdleHz;
             }
 
-            string key = HudKey(st);
+            long key = HudKey(st);
             if (key != _drawnKey) { DrawHud(st); _drawnKey = key; }
 
             Place(_spot, st.Lasing && !st.NoReturn, st.LasePoint);
@@ -209,7 +209,7 @@ namespace BombsAway
             : "RNG ----M  AZ ----  EL ----";
 
         /// <summary>Everything the HUD texture shows; it is redrawn when this changes.</summary>
-        private string HudKey(in LrfState s)
+        private long HudKey(in LrfState s)
         {
             float t = Time.unscaledTime;
             bool blink4 = (t * 4f % 1f) < 0.6f, blink3 = (t * 3f % 1f) < 0.6f;
@@ -220,7 +220,13 @@ namespace BombsAway
                 _typedAt = _typedLine == null ? -10f : t;
                 _typedLine = s.MissionLine;
             }
-            return $"{s.MissionLine}|{s.MissionIndex}|{Typed()}|{Strip()}|{s.ZoomLevel}|{(s.NoReturn ? (blink3 ? "NR" : "") : Readout(s))}|{lit}|{s.OffMark}|{blink4}|{s.MarkStatus}|{Mathf.RoundToInt(_cam.fieldOfView * 10f)}";
+            var k = new DrawKey().Add(s.MissionLine).Add(s.MissionIndex).Add(Typed()).Add(Strip()).Add(s.ZoomLevel)
+                .Add(s.NoReturn).Add(lit).Add(s.OffMark).Add(blink4).Add(s.MarkStatus).Add(Mathf.RoundToInt(_cam.fieldOfView * 10f));
+            // The readout line: what Readout prints, as numbers.
+            if (s.NoReturn) k = k.Add(blink3);
+            else if (s.HasReading) k = k.Add(true).Add(Mathf.RoundToInt(s.Range)).Add(Mathf.RoundToInt(s.AzimuthMils)).Add(Mathf.RoundToInt(s.ElevationMils));
+            else k = k.Add(false);
+            return k.Value;
         }
 
         private void DrawHud(in LrfState s)
@@ -292,12 +298,12 @@ namespace BombsAway
         }
 
         /// <summary>What the strip shows that changes on its own: the lit key and the types in the air.</summary>
-        private static string Strip()
+        private static int Strip()
         {
             bool lit = Time.unscaledTime - FireMission.SwitchedAt < KeyFlash;
             int mask = 0;
             for (int i = 0; i < FireMission.TypeCount; i++) if (FireMission.Running(FireMission.TypeAt(i))) mask |= 1 << i;
-            return $"{(lit ? FireMission.SwitchedDir : 0)}:{mask}";
+            return (mask << 8) | ((lit ? FireMission.SwitchedDir : 0) & 0xFF);
         }
 
         /// <summary>A key's name for the strip: the letter, or an arrow for a longer name.</summary>
@@ -314,10 +320,13 @@ namespace BombsAway
         /// AIR, BOMB) like the Terminal's category tabs over its items: the shown one lit, a tick
         /// under another if a mission of its is in the air.
         /// </summary>
+        private readonly List<int> _stripSlots = new List<int>();
+
         private void DrawStrip(in LrfState s, int cx)
         {
             int page = s.MissionIndex >= 0 ? FireMission.PageOf(s.MissionIndex) : 0;
-            var slots = new List<int>();
+            var slots = _stripSlots;
+            slots.Clear();
             for (int i = 0; i < FireMission.TypeCount; i++) if (FireMission.PageOf(i) == page) slots.Add(i);
             int n = slots.Count;
             var widths = FireMission.SlotWidths(slots, out int gap, out int total);

@@ -186,7 +186,7 @@ namespace BombsAway
 
             if (!Ours(x.Spec)) return;
 
-            // The bundle's effect for this kind (ExplosionFx), or the old code-built one.
+            // The bundle's effect for this kind (ExplosionFx).
             string kind = x.Spec.Id.Substring(SpecPrefix.Length);
             // A gun run's hits come at 65 to 100 a second: each only nudges the camera.
             bool gunHit = kind == "Gun30" || kind == "Gun20";
@@ -196,29 +196,12 @@ namespace BombsAway
             // A gun run may draw only every Nth hit's effect, a cluster bomb every Nth bomblet's (AirStrike decides which).
             if (gunHit && !AirStrike.TakeHitFx(kind)) return;
             if (kind == "Blu97" && !AirStrike.TakeBombletFx()) return;
-            // A kind without its own effect yet borrows the nearest one (the shells: the HE warhead's).
-            if (!ExplosionFx.Play(kind, x.Origin, x.Forward, x.HasGround, x.Ground)
-                && !(BorrowsFx(kind, out string stand) && ExplosionFx.Play(stand, x.Origin, x.Forward, x.HasGround, x.Ground)))
-            {
-                if (x.HasGround) ExplosionVFX.Spawn(x.Origin, x.Ground);
-                else             ExplosionVFX.SpawnAerial(x.Origin);
-            }
+            // The 81 mm mortar has no effect of its own: it borrows the HE warhead's.
+            ExplosionFx.Play(kind == "Mortar81" ? "MissileHE" : kind, x.Origin, x.Forward, x.HasGround, x.Ground);
 
             if (Config.Dbg1)
                 MelonLogger.Msg($"Detonate {x.Spec.Id} at {x.Origin} | cone={x.Spec.HSpreadDeg:F0}x{x.Spec.VSpreadDeg:F0}° " +
                                 $"fwd={x.Forward}{(x.Cosmetic ? " | cosmetic" : "")}");
-        }
-
-        /// <summary>The effect a kind borrows while it has none of its own in the bundle.</summary>
-        private static bool BorrowsFx(string kind, out string stand)
-        {
-            stand = kind == "Arty155" || kind == "Mortar81" || kind == "MissileTBX" || kind == "Hydra" ? "MissileHE"
-                  : kind == "Moab" ? "Jdam2000"
-                  : kind == "Blu97" ? "Hydra"
-                  : kind.StartsWith("Jdam") ? "Arty155"
-                  : kind == "Gun30" ? "Grenade"
-                  : kind == "Gun20" ? "Gun30" : null;
-            return stand != null;
         }
 
         private static void OnDebris(ExplosionSpec s, Vector3 p0, Vector3 vel, float flightTime)

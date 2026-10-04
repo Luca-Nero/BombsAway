@@ -78,7 +78,7 @@ namespace BombsAway
         private static Texture2D _tex;
         private static Mesh _mesh;
         private static readonly Color32[] _px = new Color32[W * H];
-        private static string _drawnKey;
+        private static long? _drawnKey;
 
         private static readonly Color32 ObsPre  = new Color32(140, 144, 150, 255);
         private static readonly Color32 ObsText = new Color32(222, 224, 226, 255);
@@ -290,7 +290,7 @@ namespace BombsAway
             }
 
             Place(now, shut);
-            string key = Key(now);
+            long key = Key(now);
             if (key != _drawnKey) { Draw(now); _drawnKey = key; }
         }
 
@@ -332,8 +332,9 @@ namespace BombsAway
             float f = sh * 0.5f / Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
             Vector3 halfW = rot * new Vector3(w * mpp * 0.5f, 0f, 0f), halfH = rot * new Vector3(0f, h * mpp * 0.5f, 0f);
             float want = left - sw * 0.5f, worst = float.MaxValue, worstZ = d;
-            foreach (var c in new[] { local - halfW + halfH, local - halfW - halfH })
+            for (int k = 0; k < 2; k++)
             {
+                var c = k == 0 ? local - halfW + halfH : local - halfW - halfH;
                 if (c.z <= 0.01f) continue;
                 float x = c.x / c.z * f;
                 if (x < worst) { worst = x; worstZ = c.z; }
@@ -346,7 +347,7 @@ namespace BombsAway
             if (!_go.activeSelf) _go.SetActive(true);
         }
 
-        private static string Key(float now)
+        private static long Key(float now)
         {
             int shown = 0, typed = 0;
             bool flickering = false;
@@ -359,7 +360,7 @@ namespace BombsAway
             }
             bool blink = (now * 2.5f % 1f) < 0.5f;
             int flicker = flickering ? Mathf.FloorToInt(now * 20f) : 0;
-            return $"{shown}|{typed}|{blink}|{_status}|{_program}|{flicker}";
+            return new DrawKey().Add(shown).Add(typed).Add(blink).Add(_status).Add(_program).Add(flicker).Value;
         }
 
         // ── Drawing ─────────────────────────────────────────────────────────────
@@ -372,12 +373,13 @@ namespace BombsAway
             TextAt(string.IsNullOrEmpty(_program) ? "FIRE.NET" : "FIRE.NET  " + _program, 4, 3, DosTerminal.Ink);
             TextAt(_status, W - 4 - Width(_status), 3, DosTerminal.Ink);
 
-            var shown = new List<Line>();
-            foreach (var l in _lines) { if (now < l.Start) break; shown.Add(l); }
-            int first = Mathf.Max(0, shown.Count - Rows);
-            for (int i = first; i < shown.Count; i++)
+            // The lines out so far (they start in order), the last Rows of them.
+            int shown = 0;
+            while (shown < _lines.Count && now >= _lines[shown].Start) shown++;
+            int first = Mathf.Max(0, shown - Rows);
+            for (int i = first; i < shown; i++)
             {
-                var l = shown[i];
+                var l = _lines[i];
                 int y = RowY + (i - first) * RowPitch;
                 Color32 pc = l.K == Kind.Obs ? ObsPre : l.K == Kind.Ai ? DosTerminal.Bar : l.K == Kind.Sys ? DosTerminal.Dim : DosTerminal.Amber;
                 Color32 tc = l.K == Kind.Obs ? ObsText : l.K == Kind.Sys ? DosTerminal.Dim : DosTerminal.Amber;
@@ -393,7 +395,7 @@ namespace BombsAway
                 if (l.Cut >= 0 && typed >= l.Cut && now >= l.Start + l.Cut / l.Rate)
                     text += new string(Glitch[(int)(l.Start * 97f) % Glitch.Length], 2);
                 TextAt(text, tx, y, tc);
-                bool newest = i == shown.Count - 1;
+                bool newest = i == shown - 1;
                 if (typing || (newest && (now * 2.5f % 1f) < 0.5f))
                     TextAt("_", tx + typed * (PixelFont.GW + 1), y, tc);
             }

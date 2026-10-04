@@ -203,7 +203,6 @@ namespace BombsAway
         public static int PageCount => PageNames.Length;
         public static int PageOf(int i) => AirStrike.IsBomb(Order[i]) ? 2 : IsAir(Order[i]) ? 1 : 0;
         public static string PageName(int page) => PageNames[page];
-        public static int Page => PageOf(Index);
 
         /// <summary>The chosen type's full name ("155MM HE").</summary>
         public static string TypeName => IsAir(Type) ? AirStrike.Name(Type) : For(Type).Name;

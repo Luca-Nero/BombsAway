@@ -29,8 +29,22 @@ namespace BombsAway
             return _cam != null ? _layer : -1;
         }
 
+        /// <summary>Takes the overlay camera off the world camera's stack and destroys it: if the
+        /// world camera outlives the scene, each scene would otherwise stack another one.</summary>
         public static void Reset()
         {
+            try
+            {
+                if (_cam != null)
+                {
+                    var baseData = _baseCam != null ? _baseCam.GetComponent<UniversalAdditionalCameraData>() : null;
+                    if (baseData != null) baseData.cameraStack.Remove(_cam);
+                    if (_baseCam != null && _layer >= 0) _baseCam.cullingMask |= 1 << _layer;
+                    UnityEngine.Object.Destroy(_cam.gameObject);
+                    if (Config.Dbg1) MelonLogger.Msg($"[Viewmodel] overlay camera removed (world camera {(_baseCam != null ? "kept" : "gone")}).");
+                }
+            }
+            catch (Exception e) { MelonLogger.Warning($"[Viewmodel] could not remove the overlay camera: {e.Message}"); }
             _cam = null; _baseCam = null;
             _layer = -1;
             _attempted = false;

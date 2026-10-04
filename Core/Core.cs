@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.26.0";
+        public const string Version = "5.26.2";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -163,16 +163,7 @@ namespace BombsAway
                 }
                 else
                 {
-                    if (_lockedTarget != null)
-                    {
-                        try
-                        {
-                            var go = _lockedTarget.gameObject;
-                            if (go == null) { _lockedTarget = null; HideLockIndicator(); }
-                            else UpdateLockIndicator(_lockedTarget, true);
-                        }
-                        catch { _lockedTarget = null; HideLockIndicator(); }
-                    }
+                    if (_lockedTarget != null)       UpdateLockIndicator(_lockedTarget, true);
                     else if (_focusedTarget != null) UpdateLockIndicator(_focusedTarget, false);
                     else                             HideLockIndicator();
 

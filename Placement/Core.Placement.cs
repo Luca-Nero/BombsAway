@@ -209,8 +209,8 @@ namespace BombsAway
 
             try
             {
-                if (_holoSvc == null) _holoSvc = FindHologramService(out _);
-                if (_holoMaterial == null) _holoMaterial = FindHologramMaterial(out _);
+                if (_holoSvc == null) _holoSvc = FindHologramService();
+                if (_holoMaterial == null) _holoMaterial = FindHologramMaterial();
 
                 if (_holoSvc == null || _holoMaterial == null)
                 {
@@ -294,14 +294,14 @@ namespace BombsAway
         /// <summary>The service is injected, not in the scene. Release hands it to the god
         /// toolbar (a MonoBehaviour) and to every PlacementSession; the parked human
         /// spawner's session is the fallback.</summary>
-        internal static IObjectSpawnHologramService FindHologramService(out string source)
+        internal static IObjectSpawnHologramService FindHologramService()
         {
             try
             {
                 foreach (var refs in Object.FindObjectsOfType<GAToolbarReferences>(true))
                 {
                     var svc = refs?.m_hologramService;
-                    if (svc != null) { source = "GAToolbarReferences"; return svc; }
+                    if (svc != null) return svc;
                 }
             }
             catch { }
@@ -311,12 +311,11 @@ namespace BombsAway
                 foreach (var gii in Object.FindObjectsOfType<HumanSpawnerGII>(true))
                 {
                     var svc = gii?.m_placement?.Placement?.HologramService;
-                    if (svc != null) { source = "HumanSpawnerGII placement"; return svc; }
+                    if (svc != null) return svc;
                 }
             }
             catch { }
 
-            source = null;
             return null;
         }
 
@@ -324,30 +323,29 @@ namespace BombsAway
         /// IHologramMaterialsHandler, which loads "Materials/Holograms/" + name through
         /// the asset provider. Take the loaded copy if any spawnable already asked for it,
         /// load it ourselves if not; the human spawner's material is the last resort.</summary>
-        internal static Material FindHologramMaterial(out string source)
+        internal static Material FindHologramMaterial()
         {
             try
             {
                 foreach (var m in Resources.FindObjectsOfTypeAll<Material>())
-                    if (m != null && m.name == ObjectHologramMaterialName && CanFade(m)) { source = "loaded"; return m; }
+                    if (m != null && m.name == ObjectHologramMaterialName && CanFade(m)) return m;
             }
             catch { }
 
             try
             {
                 var m = Resources.Load<Material>(ObjectHologramMaterialPath);
-                if (CanFade(m)) { source = "Resources.Load"; return m; }
+                if (CanFade(m)) return m;
             }
             catch { }
 
             try
             {
                 foreach (var gii in Resources.FindObjectsOfTypeAll<HumanSpawnerGII>())
-                    if (gii != null && CanFade(gii.m_humanHologramMaterial)) { source = "HumanSpawnerGII"; return gii.m_humanHologramMaterial; }
+                    if (gii != null && CanFade(gii.m_humanHologramMaterial)) return gii.m_humanHologramMaterial;
             }
             catch { }
 
-            source = null;
             return null;
         }
 

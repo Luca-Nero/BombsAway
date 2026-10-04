@@ -35,13 +35,16 @@ namespace BombsAway
         private static Vector3 _drift;   // the breeze integrated: the noise rides on it, shared so groups match
         private static readonly SmokeVoids _voids = new SmokeVoids();
         private static readonly Il2CppStructArray<Vector4> _voidPack = new Il2CppStructArray<Vector4>(SmokeVoids.Max * 2);
+        private static readonly List<List<SmokePlume>> _groups = new List<List<SmokePlume>>();
+        // One group is drawn at a time, so every cloud splats into the same grid and pixel
+        // buffer; only the texture (which the GPU keeps drawing from) is a cloud's own.
+        private static readonly SmokeGrid _grid = new SmokeGrid();
+        private static Il2CppStructArray<Color> _px;
 
         private readonly SmokePlume _plume;
-        private readonly SmokeGrid _grid = new SmokeGrid();
         private readonly GameObject _box;
         private readonly Material _mat;
         private readonly Texture3D _tex;
-        private readonly Il2CppStructArray<Color> _px;
         private readonly Transform _vent;
         private Vector3 _ventAt;
         private float _burnUntil;
@@ -62,7 +65,6 @@ namespace BombsAway
             _tex.name = "SmokeGrid";
             _tex.wrapMode = TextureWrapMode.Clamp;
             _tex.filterMode = FilterMode.Bilinear;
-            _px = new Il2CppStructArray<Color>(SmokeGrid.Count);
 
             int layer = SmokeLayer();
             if (layer >= 0) box.layer = layer;
@@ -126,8 +128,10 @@ namespace BombsAway
             _plumes.Clear(); _byPlume.Clear();
             foreach (var c in _all) { _plumes.Add(c._plume); _byPlume[c._plume] = c; }
             float margin = Margin();
-            foreach (var group in SmokeGrid.Groups(_plumes, margin))
+            int groups = SmokeGrid.Groups(_plumes, margin, _groups);
+            for (int gi = 0; gi < groups; gi++)
             {
+                var group = _groups[gi];
                 var lead = _byPlume[group[0]];
                 try { lead.Draw(group, margin); }
                 catch (System.Exception e)
@@ -144,6 +148,8 @@ namespace BombsAway
             foreach (var c in _all) c.Destroy();
             _all.Clear();
             _voids.Clear();
+            _plumes.Clear(); _byPlume.Clear();
+            foreach (var g in _groups) g.Clear();
         }
 
         /// <summary>
@@ -262,6 +268,7 @@ namespace BombsAway
         private void Draw(List<SmokePlume> group, float margin)
         {
             if (!_grid.Splat(group, margin)) { _box.SetActive(false); return; }
+            if (_px == null) _px = new Il2CppStructArray<Color>(SmokeGrid.Count);
             float[] d = _grid.D, r = _grid.R, g = _grid.G, b = _grid.B;
             for (int k = 0; k < SmokeGrid.Count; k++) _px[k] = new Color(r[k], g[k], b[k], d[k]);
             _tex.SetPixels(_px, 0);

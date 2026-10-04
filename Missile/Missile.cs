@@ -56,39 +56,15 @@ namespace BombsAway
 
             var owned = new System.Collections.Generic.List<Material>();
             // The bundled model: its own material copies, and for the Javelin a rig for fins and nozzle glow.
-            // Without one (the bundle failed to load), a plain capsule.
             GameObject obj = OrdnanceModels.Spawn(kind, spawnAt,
                 out _, out Material[] bundleMats);
             MissileRig rig = null;
             RocketRig rocketRig = null;
-            if (obj != null)
-            {
-                obj.name = rocket ? "Rocket" : "HomingMissile";
-                owned.AddRange(bundleMats);
-                if (rocket) rocketRig = RocketRig.Bind(obj.transform);
-                else        rig = MissileRig.Bind(obj.transform);
-                OrdnanceModels.PaintWarhead(kind, obj, MissileWarheadMode);   // its stencil says what it carries
-            }
-            else
-            {
-                obj = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                obj.name = "HomingMissile";
-                obj.transform.position = spawnAt;
-                obj.transform.localScale = new Vector3(0.08f, 0.2f, 0.08f);
-
-                var rend = obj.GetComponent<Renderer>();
-                if (rend != null)
-                {
-                    var bodyMat = new Material(Config.FindShader());
-                    bodyMat.color = new Color(0.3f, 0.3f, 0.32f, 1f);
-                    rend.material = bodyMat;
-                    owned.Add(bodyMat);
-                    rend.shadowCastingMode = ShadowCastingMode.Off;
-                }
-
-                var col = obj.GetComponent<Collider>();
-                if (col != null) GameObject.Destroy(col);
-            }
+            obj.name = rocket ? "Rocket" : "HomingMissile";
+            owned.AddRange(bundleMats);
+            if (rocket) rocketRig = RocketRig.Bind(obj.transform);
+            else        rig = MissileRig.Bind(obj.transform);
+            OrdnanceModels.PaintWarhead(kind, obj, MissileWarheadMode);   // its stencil says what it carries
 
             var trailAnchor = new GameObject("TrailAnchor");
             trailAnchor.transform.SetParent(obj.transform, false);

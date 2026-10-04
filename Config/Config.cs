@@ -769,7 +769,7 @@ namespace BombsAway
         {
             if (!_litShaderResolved)
             {
-                _cachedLitShader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                _cachedLitShader = Shader.Find("Universal Render Pipeline/Lit");
                 _litShaderResolved = true;
             }
             return _cachedLitShader;

@@ -20,7 +20,6 @@ namespace BombsAway
     /// The root sits at the blast, +Y up. Particle collision layers are set in the prefab (the
     /// game's build strips the collision module's scripting API, and startDelay with it), and
     /// an effect is destroyed once none of its systems is alive and its sounds have played.
-    /// A kind with no prefab falls back to the old code-built effect (Explosion.Vfx.cs).
     /// </summary>
     internal static class ExplosionFx
     {
@@ -32,12 +31,12 @@ namespace BombsAway
         private sealed class Live { public GameObject Go; public ParticleSystem Root; public float Born, SoundsDone; }
         private static readonly List<Live> _live = new List<Live>();
 
-        /// <summary>Plays the kind's effect; false if the bundle has none (the caller falls back).</summary>
-        public static bool Play(string kind, Vector3 origin, Vector3 forward, bool hasGround, RaycastHit ground)
+        /// <summary>Plays the kind's effect; nothing if the bundle has none.</summary>
+        public static void Play(string kind, Vector3 origin, Vector3 forward, bool hasGround, RaycastHit ground)
         {
             string name = "FX_" + kind;
             var prefab = OrdnanceModels.Asset(name);
-            if (prefab == null) return false;
+            if (prefab == null) return;
 
             Vector3 flat = Vector3.ProjectOnPlane(forward, Vector3.up);
             if (flat.sqrMagnitude < 1e-4f) flat = Vector3.forward;
@@ -84,7 +83,6 @@ namespace BombsAway
                 if (a.clip != null) sounds = Mathf.Max(sounds, a.clip.length / Mathf.Max(0.05f, Mathf.Abs(a.pitch)));   // pitched down plays longer
             _live.Add(new Live { Go = go, Root = root, Born = Time.time, SoundsDone = Time.time + delay + sounds * 1.1f + 0.3f });   // jitter and slow motion
             if (Config.Dbg2) MelonLogger.Msg($"[FX] {name} at {origin} ground={onGround} sound in {delay:F2}s");
-            return true;
         }
 
         /// <summary>Every frame: effects whose particles are all gone and whose sounds have played go too.</summary>

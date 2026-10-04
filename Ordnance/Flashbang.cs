@@ -332,6 +332,7 @@ namespace BombsAway
             bool newFrame = Time.frameCount != _lastFrame;
             _lastFrame = Time.frameCount;
             if (newFrame) TickRing();
+            if (newFrame && _arms.Count > 0) PruneArms();
             if (_stunned.Count == 0) return;
 
             float now = Time.time;

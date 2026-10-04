@@ -30,9 +30,6 @@ namespace BombsAway
             new Color(0.17f, 0.17f, 0.18f),   // charcoal
         };
 
-        /// <summary>Thrown or set down with the pin-and-spoon sequence: the frag, smoke and flash grenades.</summary>
-        private static bool IsHandGrenade(Ordnance o) => o == Ordnance.Grenade || o == Ordnance.Smoke || o == Ordnance.Flash;
-
         /// <summary>A launcher: fires rather than throws, and is never placed.</summary>
         private static bool IsLauncher(Ordnance o) => o == Ordnance.Missile || o == Ordnance.Rocket;
 
@@ -57,7 +54,7 @@ namespace BombsAway
         private static readonly string[] OrdnanceUse = { "throw / place", "stick / detonate", "place", "lock-on launch", "point and shoot", "throw / place", "throw / place", "lase / call fire" };
         private static readonly Sprite[] _icons = new Sprite[OrdnanceLabels.Length];
 
-        /// <summary>The embedded icon, rendered isometric from the bundled model (Assets/FRUKT); null for a placeholder.</summary>
+        /// <summary>The embedded icon, rendered isometric from the bundled model (Assets/FRUKT).</summary>
         private static string IconFile(Ordnance o) => o switch
         {
             Ordnance.Missile => "Icons/Javelin.png",
@@ -71,9 +68,7 @@ namespace BombsAway
             int i = (int)o;
             if (_icons[i] == null)
             {
-                string file = IconFile(o);
-                if (file != null)
-                    _icons[i] = FruitIcons.Load(System.Reflection.Assembly.GetExecutingAssembly(), file);
+                _icons[i] = FruitIcons.Load(System.Reflection.Assembly.GetExecutingAssembly(), IconFile(o));
                 if (_icons[i] == null) _icons[i] = FruitIcons.Solid(OrdnanceColours[i]);
             }
             return _icons[i];

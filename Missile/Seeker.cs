@@ -103,7 +103,7 @@ namespace BombsAway
         {
             if (_lockedTarget != null)
             {
-                bool gone = _lockedTarget == null || (_lockedBody != null && !_lockedBody.Alive);
+                bool gone = _lockedBody != null && !_lockedBody.Alive;
                 if (gone || (!LockPinned && Config.LockBreaks && !InView(LockedPoint(), Config.LockBreakAngle, 1.15f)))
                     BreakLock(gone ? "target gone" : "strayed");
             }

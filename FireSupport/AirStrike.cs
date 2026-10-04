@@ -351,12 +351,12 @@ namespace BombsAway
             public Hercules H;                    // the C-130's ramp, props, drogue and cradle (the MOAB's carrier)
             public string Sign;                   // on the net: HOG, RAPTOR, EAGLE, GUNFIGHTER, HERC
             public Airframe CraftKind;
-            public Vector3 Mark, Heading, Right, Aim0, Aim1;
+            public Vector3 Mark, Heading, Aim0, Aim1;
             public float FireAt, BurstEnd, InAt, CompleteAt;
             public Path Path;
             public GameObject Craft;
-            public Transform Nose, Muzzle, Rotor, TailRotor;
-            public Transform Barrels, GunDoor;    // the model's GAU-8 cluster / M61 door (5f), null on stand-ins
+            public Transform Muzzle, Rotor, TailRotor;
+            public Transform Barrels, GunDoor;    // the model's GAU-8 cluster / M61 door (5f)
             public Quaternion BarrelsRest, DoorRest;
             public Quaternion RotorRest = Quaternion.identity, TailRotorRest = Quaternion.identity;   // the AH64 model's rotors at rest
             public float Spin, SpinRate;
@@ -377,7 +377,7 @@ namespace BombsAway
         private static readonly List<Fuze> _fuzes = new List<Fuze>();
         private static bool _hooked;
         private static int _hitFx;
-        private static Material _bodyMat, _darkMat, _smokeMat, _flashMat;
+        private static Material _smokeMat, _flashMat;
 
         public static string Code(FireMissionType t) => IsBomb(t) ? BombFor(t).Code : IsRocket(t) ? RocketFor(t).Code : For(t).Code;
         public static string Name(FireMissionType t) => IsBomb(t) ? BombFor(t).Name : IsRocket(t) ? RocketFor(t).Name : For(t).Name;
@@ -445,7 +445,6 @@ namespace BombsAway
                 return BuildRun(a0 - dn * g.Range, dn, p.Heading, g.Speed, 0f, g.Burst + 0.4f, p.Away, g.PullG, ClimbAngle, p.Shape);
             }, out Path path);
             Vector3 heading = plan.Heading;
-            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
             int hdg = Mathf.RoundToInt(plan.Az) % 360;
 
             // On the terminal the jet is spawned where its run begins and the call is made once
@@ -456,7 +455,7 @@ namespace BombsAway
 
             var s = new Strike
             {
-                Number = FireMission.NextNumber(), Type = g.Type, G = g, Sign = g.Sign, CraftKind = g.Craft, Mark = mark, Heading = heading, Right = right, Term = term,
+                Number = FireMission.NextNumber(), Type = g.Type, G = g, Sign = g.Sign, CraftKind = g.Craft, Mark = mark, Heading = heading, Term = term,
                 Aim0 = mark - heading * g.Walk * 0.5f, Aim1 = mark + heading * g.Walk * 0.5f,
                 FireAt = now + Mathf.Max(12f, Config.AirTimeOnTarget),
                 Rate = g.Rate,
@@ -642,8 +641,7 @@ namespace BombsAway
                 if (s.CraftKind == Airframe.AH64) BuildAH64(s);
                 else if (s.CraftKind == Airframe.F15) BuildF15(s);
                 else if (s.CraftKind == Airframe.C130) BuildC130(s);
-                else if (s.CraftKind == Airframe.F22) BuildF22(s);
-                else BuildA10(s);
+                else SpawnModel(s, s.CraftKind == Airframe.F22 ? "F22" : "A10");
             }
             s.Path.Sample(now, out Vector3 pos, out Vector3 fwd, out Vector3 up);
             s.Craft.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(fwd, up));
@@ -798,9 +796,9 @@ namespace BombsAway
             _fuzes.Clear();
         }
 
-        // ── The stand-in aircraft ───────────────────────────────────────────────
+        // ── The aircraft ───────────────────────────────────────────────
 
-        /// <summary>A 5f model from the bundle (1.2x real), on layer 2 with no colliders; null without it.</summary>
+        /// <summary>A 5f model from the bundle (1.2x real), on layer 2 with no colliders.</summary>
         private static GameObject SpawnBare(string prefab)
         {
             var src = OrdnanceModels.Asset(prefab);
@@ -818,75 +816,17 @@ namespace BombsAway
 
         /// <summary>
         /// A gun run's 5f model (<c>A10</c>, <c>F22</c>: parts Barrels / GunDoor, a Muzzle marker),
-        /// with its gun smoke and flash at the Muzzle; false without it.
+        /// with its gun smoke and flash at the Muzzle.
         /// </summary>
-        private static bool SpawnModel(Strike s, string prefab)
+        private static void SpawnModel(Strike s, string prefab)
         {
             var root = SpawnBare(prefab);
-            if (root == null) return false;
             s.Barrels = root.transform.Find("Barrels");
             s.GunDoor = root.transform.Find("GunDoor");
             if (s.Barrels != null) s.BarrelsRest = s.Barrels.localRotation;
             if (s.GunDoor != null) s.DoorRest = s.GunDoor.localRotation;
             s.Spin = s.SpinRate = 0f;
             GunSmokeAndFlash(s, root.transform, root.transform.Find("Muzzle"));
-            s.Craft = root;
-            return true;
-        }
-
-        /// <summary>An A-10 out of boxes at its real size (16.3 m long, 17.5 m span), when the bundle has no model.</summary>
-        private static void BuildA10(Strike s)
-        {
-            if (SpawnModel(s, "A10")) return;
-            EnsureMats();
-            var root = new GameObject("BA_A10");
-            root.layer = 2;
-            var t = root.transform;
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0f), new Vector3(1.6f, 1.9f, 13f), _bodyMat);         // fuselage
-            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.15f, 7.1f), new Vector3(1.15f, 1.3f, 1.8f), _bodyMat);  // nose
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.8f, 4.9f), new Vector3(0.9f, 0.6f, 1.6f), _darkMat);     // canopy
-            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.55f, 0.6f), new Vector3(17.5f, 0.32f, 2.6f), _bodyMat); // wings
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.75f, -6.6f), new Vector3(5.6f, 0.22f, 1.7f), _bodyMat);  // tailplane
-            for (int side = -1; side <= 1; side += 2)
-            {
-                var eng = Part(t, PrimitiveType.Capsule, new Vector3(side * 1.55f, 1.25f, -2.7f), new Vector3(1.25f, 2.1f, 1.25f), _darkMat);
-                eng.localRotation = Quaternion.Euler(90f, 0f, 0f);                                                  // engine pods, along the body
-                Part(t, PrimitiveType.Cube, new Vector3(side * 2.8f, 1.5f, -6.7f), new Vector3(0.22f, 2.6f, 1.9f), _bodyMat);   // fins
-            }
-            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.75f, 8.1f), new Vector3(0.3f, 0.3f, 1.2f), _darkMat);  // the gun's barrels
-
-            GunSmokeAndFlash(s, t);
-            s.Craft = root;
-        }
-
-        /// <summary>
-        /// An F-22 out of boxes at its real size (18.9 m long, 13.6 m span), until 5f's model: the
-        /// diamond wing as two swept slabs, twin fins canted out, the nozzles side by side; the
-        /// gun over the right intake.
-        /// </summary>
-        private static void BuildF22(Strike s)
-        {
-            if (SpawnModel(s, "F22")) return;
-            EnsureMats();
-            var root = new GameObject("BA_F22");
-            root.layer = 2;
-            var t = root.transform;
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, -0.5f), new Vector3(2.2f, 1.3f, 14f), _bodyMat);       // fuselage
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.05f, 7.6f), new Vector3(1.3f, 0.9f, 3.2f), _bodyMat);    // nose
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.15f, 9.4f), new Vector3(0.6f, 0.5f, 0.9f), _darkMat);    // radome tip
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.8f, 5.2f), new Vector3(0.8f, 0.5f, 2.6f), _darkMat);     // canopy
-            for (int side = -1; side <= 1; side += 2)
-            {
-                Part(t, PrimitiveType.Cube, new Vector3(side * 1.6f, -0.1f, 2.6f), new Vector3(1.1f, 1.1f, 3.4f), _darkMat);   // intakes
-                var wing = Part(t, PrimitiveType.Cube, new Vector3(side * 3.6f, -0.1f, -2.4f), new Vector3(5.6f, 0.2f, 4.6f), _bodyMat);
-                wing.localRotation = Quaternion.Euler(0f, side * -22f, 0f);                                          // swept back
-                var tail = Part(t, PrimitiveType.Cube, new Vector3(side * 2.5f, -0.05f, -7.6f), new Vector3(2.4f, 0.15f, 2.4f), _bodyMat);
-                tail.localRotation = Quaternion.Euler(0f, side * -25f, 0f);                                          // tailplanes
-                var fin = Part(t, PrimitiveType.Cube, new Vector3(side * 1.75f, 1.55f, -6.2f), new Vector3(0.15f, 2.6f, 2.6f), _bodyMat);
-                fin.localRotation = Quaternion.Euler(0f, 0f, side * -28f);                                           // canted out
-                Part(t, PrimitiveType.Cube, new Vector3(side * 0.65f, 0f, -8.1f), new Vector3(1.0f, 0.8f, 1.2f), _darkMat);    // nozzles
-            }
-            GunSmokeAndFlash(s, t);
             s.Craft = root;
         }
 
@@ -899,7 +839,6 @@ namespace BombsAway
             nose.layer = 2;
             nose.transform.SetParent(t, false);
             nose.transform.localPosition = marker != null ? marker.localPosition + new Vector3(0f, 0f, 0.3f) : g.Muzzle + new Vector3(0f, 0.25f, 0.8f);
-            s.Nose = nose.transform;
             var tr = nose.AddComponent<TrailRenderer>();
             tr.sharedMaterial = _smokeMat;
             tr.time = 3.5f;
@@ -932,11 +871,8 @@ namespace BombsAway
 
         private static void EnsureMats()
         {
-            if (_bodyMat != null) return;
-            var lit = Config.FindShader();
+            if (_smokeMat != null) return;
             var sprite = Config.FindSpriteShader();
-            _bodyMat = new Material(lit) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(0.165f, 0.17f, 0.176f) };   // char
-            _darkMat = new Material(lit) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(0.255f, 0.262f, 0.272f) };  // gun
             _smokeMat = new Material(sprite) { hideFlags = HideFlags.DontUnloadUnusedAsset };
             _flashMat = new Material(sprite) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(1f, 0.86f, 0.5f, 1f) };
         }

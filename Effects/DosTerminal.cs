@@ -60,7 +60,8 @@ namespace BombsAway
         private Texture2D _tex;
         private Mesh _mesh;
         private readonly Color32[] _px = new Color32[W * H];
-        private string _drawnKey;
+        private readonly List<(string text, Color32 c)> _rows = new List<(string text, Color32 c)>();   // Draw's log rows
+        private long? _drawnKey;
         private bool _warned;
 
         // Behind a model (Tick's behind): its parts, and how far the window is pushed back (1: not).
@@ -178,7 +179,7 @@ namespace BombsAway
             if (!_doneSounded && now >= done && _closeAt < 0f) { _doneSounded = true; Sfx.PlayHeld("LrfFix", 0.35f); }
 
             Place(cam, anchor, offset, yaw, layer, behind, now);
-            string key = Key(now, typed);
+            long key = Key(now, typed);
             if (key != _drawnKey) { Draw(now, typed); _drawnKey = key; }
         }
 
@@ -337,13 +338,13 @@ namespace BombsAway
         }
 
         /// <summary>Everything the texture shows; it is redrawn when this changes.</summary>
-        private string Key(float now, int typed)
+        private long Key(float now, int typed)
         {
             int lines = LinesShown(now);
             int hex = now >= _runAt && now < _runAt + _duration ? Mathf.FloorToInt((now - _runAt) / HexStep) : -1;
             bool cursor = (now * 2f % 1f) < 0.55f;
             bool blink = (now * 8f % 1f) < 0.5f;
-            return $"{Command}|{typed}|{lines}|{hex}|{_round}|{cursor}|{blink}|{now >= _runAt + _duration}";
+            return new DrawKey().Add(Command).Add(typed).Add(lines).Add(hex).Add(_round).Add(cursor).Add(blink).Add(now >= _runAt + _duration).Value;
         }
 
         /// <summary>The script's lines out so far: the first as it starts, the last by 85 % of the run.</summary>
@@ -368,7 +369,8 @@ namespace BombsAway
 
             // The log, scrolled so the newest row is the last: the prompt, the script so far,
             // then the memory dump flickering under it while it runs, or the done line.
-            var rows = new List<(string text, Color32 c)>();
+            var rows = _rows;
+            rows.Clear();
             bool done = now >= _runAt + _duration;
             bool cursorOn = (now * 2f % 1f) < 0.55f;
             rows.Add((Prompt + Command.Substring(0, typed) + (typed < Command.Length || (now < _runAt && cursorOn) ? "_" : ""), Amber));
@@ -490,9 +492,11 @@ namespace BombsAway
         public static bool Flash(float contest) => Rand() < contest * 0.03f;
 
         private static readonly Dictionary<int, (Color32[] px, int w, int h)> _atlases = new Dictionary<int, (Color32[], int, int)>();
+        private static readonly Queue<int> _atlasOrder = new Queue<int>();
+        private const int MaxAtlases = 8;   // the oldest read is dropped past this (holders keep their array)
 
         /// <summary>
-        /// A texture's texels on the CPU, read once and kept: bundle textures aren't readable, so
+        /// A texture's texels on the CPU, read once and kept (the last MaxAtlases): bundle textures aren't readable, so
         /// it goes through a RenderTexture (Graphics.Blit with scale and offset, the overload the
         /// game build keeps) and ReadPixels. Null, with a warning, if that fails.
         /// </summary>
@@ -530,7 +534,9 @@ namespace BombsAway
                 if (rt != null) RenderTexture.ReleaseTemporary(rt);
                 if (read != null) Object.Destroy(read);
             }
+            while (_atlasOrder.Count >= MaxAtlases) _atlases.Remove(_atlasOrder.Dequeue());
             _atlases[id] = (atlas, w, h);   // misses too: one warning
+            _atlasOrder.Enqueue(id);
             if (atlas == null) { w = h = 0; }
             return atlas;
         }

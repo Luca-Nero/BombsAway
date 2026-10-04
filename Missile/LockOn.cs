@@ -207,11 +207,7 @@ namespace BombsAway
         private static Rigidbody ScanForTarget()
         {
             float now = Time.unscaledTime;
-            if (now < _scanNextTime)
-            {
-                if (_scanResult == null) _scanResult = null;  // destroyed since the last scan
-                return _scanResult;
-            }
+            if (now < _scanNextTime) return _scanResult;
             _scanNextTime = now + ScanInterval;
             _scanResult = ScanForTargetNow();
             return _scanResult;

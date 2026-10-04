@@ -61,8 +61,6 @@ namespace BombsAway
 
         public SmokePlume(Settings s) { _s = s; }
 
-        public void Configure(Settings s) => _s = s;
-
         public bool Alive => Parcels.Count > 0;
 
         /// <summary>Moves the smoke on by dt; while <paramref name="feeding"/>, the can at <paramref name="vent"/> adds more.</summary>
@@ -320,32 +318,46 @@ namespace BombsAway
 
         /// <summary>
         /// Plumes whose smoke boxes (grown by <paramref name="margin"/>) touch, directly or through
-        /// others, put into groups: one grid each.
+        /// others, put into groups: one grid each. The groups are written into the first entries of
+        /// <paramref name="into"/> (its lists are reused, so nothing is allocated once it has grown);
+        /// returns how many there are. Each group keeps the plumes' order.
         /// </summary>
-        public static List<List<SmokePlume>> Groups(List<SmokePlume> plumes, float margin)
+        public static int Groups(List<SmokePlume> plumes, float margin, List<List<SmokePlume>> into)
         {
             int n = plumes.Count;
-            var lo = new Vector3[n]; var hi = new Vector3[n]; var has = new bool[n];
-            var group = new int[n];
-            for (int i = 0; i < n; i++) { has[i] = plumes[i].Bounds(margin, out lo[i], out hi[i]); group[i] = i; }
+            if (_gLo.Length < n)
+            {
+                int m = Mathf.Max(n, _gLo.Length * 2);
+                _gLo = new Vector3[m]; _gHi = new Vector3[m]; _gHas = new bool[m]; _gRoot = new int[m]; _gSlot = new int[m];
+            }
+            for (int i = 0; i < n; i++) { _gHas[i] = plumes[i].Bounds(margin, out _gLo[i], out _gHi[i]); _gRoot[i] = i; _gSlot[i] = -1; }
             for (int i = 0; i < n; i++)
                 for (int j = i + 1; j < n; j++)
                 {
-                    if (!has[i] || !has[j]) continue;
-                    if (lo[i].x > hi[j].x || lo[j].x > hi[i].x || lo[i].y > hi[j].y || lo[j].y > hi[i].y || lo[i].z > hi[j].z || lo[j].z > hi[i].z) continue;
-                    int a = Root(group, i), b = Root(group, j);
-                    if (a != b) group[b] = a;
+                    if (!_gHas[i] || !_gHas[j]) continue;
+                    Vector3 li = _gLo[i], hi = _gHi[i], lj = _gLo[j], hj = _gHi[j];
+                    if (li.x > hj.x || lj.x > hi.x || li.y > hj.y || lj.y > hi.y || li.z > hj.z || lj.z > hi.z) continue;
+                    int a = Root(_gRoot, i), b = Root(_gRoot, j);
+                    if (a != b) _gRoot[b] = a;
                 }
-            var o = new List<List<SmokePlume>>();
-            var byRoot = new Dictionary<int, List<SmokePlume>>();
+            int count = 0;
             for (int i = 0; i < n; i++)
             {
-                int r = Root(group, i);
-                if (!byRoot.TryGetValue(r, out var list)) { byRoot[r] = list = new List<SmokePlume>(); o.Add(list); }
-                list.Add(plumes[i]);
+                int r = Root(_gRoot, i);
+                if (_gSlot[r] < 0)
+                {
+                    _gSlot[r] = count;
+                    if (into.Count <= count) into.Add(new List<SmokePlume>());
+                    into[count++].Clear();
+                }
+                into[_gSlot[r]].Add(plumes[i]);
             }
-            return o;
+            return count;
         }
+
+        private static Vector3[] _gLo = new Vector3[0], _gHi = new Vector3[0];
+        private static bool[] _gHas = new bool[0];
+        private static int[] _gRoot = new int[0], _gSlot = new int[0];
 
         private static int Root(int[] g, int i)
         {

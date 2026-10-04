@@ -295,6 +295,7 @@ namespace BombsAway
                 if (big == null || s.W * s.H > big.W * big.H) big = s;
             }
             AtlasLine = big != null ? $"ATLAS {big.W}X{big.H}  {_live.Count} SHEET{(_live.Count == 1 ? "" : "S")}" : "ATLAS NONE";
+            DropUnusedSheets();
             Round(0f);
         }
 
@@ -362,6 +363,23 @@ namespace BombsAway
                 if (slot.Swapped != null) foreach (var m in slot.Swapped) if (m != null) Object.Destroy(m);
             _slots.Clear();
             _live.Clear();
+        }
+
+        private static readonly List<int> _sheetsGone = new List<int>();
+
+        /// <summary>Keeps only the sheets of the model just begun (equipping it again reuses them):
+        /// each sheet is a texture and two texel arrays, so one per atlas ever seen would add up.</summary>
+        private void DropUnusedSheets()
+        {
+            _sheetsGone.Clear();
+            foreach (var kv in _sheets)
+                if (kv.Value == null || !_live.Contains(kv.Value)) _sheetsGone.Add(kv.Key);
+            foreach (int key in _sheetsGone)
+            {
+                var s = _sheets[key];
+                if (s != null && s.Tex != null) Object.Destroy(s.Tex);
+                _sheets.Remove(key);
+            }
         }
 
         /// <summary>An alpha-cut copy of <paramref name="orig"/> on its atlas's live copy, or null if it can't have one.</summary>

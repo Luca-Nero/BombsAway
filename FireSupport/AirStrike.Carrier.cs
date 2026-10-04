@@ -53,11 +53,10 @@ namespace BombsAway
             public Vector3 Pos, Vel;
         }
 
-        /// <summary>The bundle's C130 with the MOAB in its bay; the stand-in F-15E without it.</summary>
+        /// <summary>The bundle's C130 with the MOAB in its bay.</summary>
         private static void BuildC130(Strike s)
         {
             var root = SpawnBare("C130");
-            if (root == null) { BuildF15(s); return; }
             var t = root.transform;
             var h = s.H ?? (s.H = new Hercules());
             h.Ramp = t.Find("Ramp");
@@ -75,9 +74,6 @@ namespace BombsAway
             if (drogue != null) drogue.gameObject.SetActive(false);
             h.Bomb = BuildBomb(s.B.K, t).transform;
             h.Bomb.localPosition = HercStow;
-            // The stand-in's grid fins ride folded against the body (the model folds its own in BuildBomb).
-            for (int i = 0; i < h.Bomb.childCount; i++)
-                if (h.Bomb.GetChild(i).name == "GridFin") h.Bomb.GetChild(i).localScale = new Vector3(1f, 0.45f, 1f);
             if (s.B.Released)
             {
                 // Rebuilt after the drop: its cradle and drogue are already out (or gone).

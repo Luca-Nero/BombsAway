@@ -24,7 +24,6 @@ namespace BombsAway
     internal static partial class AirStrike
     {
         private const float BombletTau = 0.6f;    // s: the decelerator's braking, as exp(-t / tau)
-        private const float BombletScale = 1.5f;  // drawn a size up, as the hand-held ordnance, to read at range
 
         private sealed class Bomblet
         {
@@ -58,14 +57,12 @@ namespace BombsAway
             public Collider Col;
             public float Born;
             public bool Set;                      // it goes off on the next frame
-            public bool Model;                    // the BLU97 model (its axis is local Z), not the cylinder (local Y)
         }
 
         private struct BombletBurst { public Vector3 At, Dir; public Cluster From; }
 
         private static readonly List<BombletBurst> _bomblets = new List<BombletBurst>();
         private static readonly List<Dud> _duds = new List<Dud>();
-        private static Material _bombletMat;
         private static int _bombletFx;
 
         /// <summary>A cluster bomb may draw every CbuFxEvery-th bomblet's burst effect.</summary>
@@ -281,43 +278,25 @@ namespace BombsAway
             // Nose in, slanted as it struck, or tipped over.
             Vector3 axis = Random.value < 0.5f ? dir : Vector3.Cross(normal, Random.onUnitSphere).normalized;
             if (axis.sqrMagnitude < 1e-4f) axis = -normal;
-            // The bundle's BLU97 (5.24.0) with its decelerator gone, its own box round the can; or
-            // the stand-in cylinder. Its own body on the world's layer: the blast, bodies and props move it.
-            var src = OrdnanceModels.Asset("BLU97");
-            GameObject go;
-            Collider col;
-            if (src != null)
-            {
-                go = Object.Instantiate(src);
-                go.name = "BA_Blu97Dud";
-                var chute = go.transform.Find("Chute");
-                if (chute != null) Object.Destroy(chute.gameObject);
-                foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 0;
-                var body = go.transform.Find("Body");
-                var mf = body != null ? body.GetComponent<MeshFilter>() : null;
-                var box = go.AddComponent<BoxCollider>();
-                if (mf != null && mf.sharedMesh != null) { box.center = mf.sharedMesh.bounds.center; box.size = mf.sharedMesh.bounds.size; }
-                else { box.center = Vector3.zero; box.size = new Vector3(0.096f, 0.096f, 0.26f); }
-                col = box;
-                // Nose in: its probe's tip on the hit, so the box doesn't start inside the ground; on its side, resting on it.
-                float tip = box.center.z + 0.5f * box.size.z;
-                Vector3 at = Mathf.Abs(Vector3.Dot(axis, normal)) > 0.3f ? hit - axis * tip + normal * 0.01f : hit + normal * (0.5f * box.size.x + 0.01f);
-                go.transform.SetPositionAndRotation(at, Quaternion.FromToRotation(Vector3.forward, axis));
-            }
-            else
-            {
-                EnsureBombletMat();
-                go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                go.name = "BA_Blu97Dud";
-                go.transform.localScale = new Vector3(0.064f, 0.1f, 0.064f) * BombletScale;
-                go.transform.SetPositionAndRotation(hit + normal * (0.06f * BombletScale), Quaternion.FromToRotation(Vector3.down, axis));
-                var r = go.GetComponent<Renderer>();
-                if (r != null) r.sharedMaterial = _bombletMat;
-                col = go.GetComponent<Collider>();
-            }
+            // The bundle's BLU97 (5.24.0) with its decelerator gone, its own box round the can.
+            // Its own body on the world's layer: the blast, bodies and props move it.
+            var go = Object.Instantiate(OrdnanceModels.Asset("BLU97"));
+            go.name = "BA_Blu97Dud";
+            var chute = go.transform.Find("Chute");
+            if (chute != null) Object.Destroy(chute.gameObject);
+            foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 0;
+            var body = go.transform.Find("Body");
+            var mf = body != null ? body.GetComponent<MeshFilter>() : null;
+            var box = go.AddComponent<BoxCollider>();
+            if (mf != null && mf.sharedMesh != null) { box.center = mf.sharedMesh.bounds.center; box.size = mf.sharedMesh.bounds.size; }
+            else { box.center = Vector3.zero; box.size = new Vector3(0.096f, 0.096f, 0.26f); }
+            // Nose in: its probe's tip on the hit, so the box doesn't start inside the ground; on its side, resting on it.
+            float tip = box.center.z + 0.5f * box.size.z;
+            Vector3 at = Mathf.Abs(Vector3.Dot(axis, normal)) > 0.3f ? hit - axis * tip + normal * 0.01f : hit + normal * (0.5f * box.size.x + 0.01f);
+            go.transform.SetPositionAndRotation(at, Quaternion.FromToRotation(Vector3.forward, axis));
             var rb = go.AddComponent<Rigidbody>();
             rb.mass = 1.5f;
-            _duds.Add(new Dud { Go = go, Rb = rb, Col = col, Born = Time.time, Model = src != null });
+            _duds.Add(new Dud { Go = go, Rb = rb, Col = box, Born = Time.time });
         }
 
         /// <summary>A round hit something: if it was a dud, it goes off on the next frame (FruitLib is mid-step).</summary>
@@ -340,7 +319,7 @@ namespace BombsAway
                 // Settled first: the drop that laid it doesn't count.
                 bool moved = now - d.Born > 1.5f && d.Rb != null && d.Rb.linearVelocity.magnitude > sense;
                 if (!d.Set && !moved) continue;
-                Vector3 at = d.Go.transform.position, axis = d.Model ? d.Go.transform.forward : -d.Go.transform.up;
+                Vector3 at = d.Go.transform.position, axis = d.Go.transform.forward;
                 Object.Destroy(d.Go);
                 _duds.RemoveAt(i);
                 _bomblets.Add(new BombletBurst { At = at, Dir = Random.value < 0.5f ? axis : -axis });
@@ -348,38 +327,12 @@ namespace BombsAway
             }
         }
 
-        // ── The stand-ins ───────────────────────────────────────────────────────
-
-        private static void EnsureBombletMat()
-        {
-            if (_bombletMat == null)
-                _bombletMat = new Material(Config.FindShader()) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(0.82f, 0.59f, 0f) };   // yel: BLU-97s are yellow
-        }
-
-        /// <summary>
-        /// A BLU-97/B: the bundle's BLU97 (5.24.0, 1.5x real: the yellow can, its standoff probe
-        /// out, the decelerator behind it), or a stand-in: a yellow can 6.4 cm across and 20 cm
-        /// long, its decelerator streaming behind it.
-        /// </summary>
+        /// <summary>A BLU-97/B: the bundle's BLU97 (5.24.0, 1.5x real: the yellow can, its standoff probe out, the decelerator behind it).</summary>
         private static GameObject BuildBomblet()
         {
             var model = SpawnBare("BLU97");
-            if (model != null)
-            {
-                foreach (var r in model.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                return model;
-            }
-            EnsureMats();
-            EnsureBombletMat();
-            var root = new GameObject("BA_Blu97");
-            root.layer = 2;
-            var t = root.transform;
-            var body = Part(t, PrimitiveType.Cylinder, Vector3.zero, new Vector3(0.064f, 0.1f, 0.064f) * BombletScale, _bombletMat);
-            body.localRotation = Quaternion.Euler(90f, 0f, 0f);   // its length along the fall
-            var chute = Part(t, PrimitiveType.Cylinder, new Vector3(0f, 0f, -0.17f * BombletScale), new Vector3(0.11f, 0.03f, 0.11f) * BombletScale, _darkMat);
-            chute.localRotation = Quaternion.Euler(90f, 0f, 0f);  // the inflated decelerator, behind it
-            foreach (var r in root.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            return root;
+            foreach (var r in model.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            return model;
         }
 
         // ── Clearing ────────────────────────────────────────────────────────────

@@ -10,11 +10,12 @@ namespace BombsAway
 {
     internal static class VfxRunner
     {
-        internal enum Kind { Fireball, Smoke, Debris, Fade, Plume }
-
+        /// <summary>
+        /// A puff thrown out fast and stopped by the air (the AT-4's backblast): velocity
+        /// decays, it swells quickly and then slowly, rises a little, and thins out.
+        /// </summary>
         internal class Item
         {
-            public Kind Kind;
             public GameObject Go;
             public Renderer Rend;
             public Color BaseColor;
@@ -23,11 +24,9 @@ namespace BombsAway
             public float Delay;
             public float BaseScale;
             public float RiseSpeed;
-            public float SpinRate;
             public Vector3 Velocity;
-            public float Gravity;
-            public float Drag;         // Plume: velocity lost per second, exponential
-            public float Grow;         // Plume: how many times its size it swells by
+            public float Drag;         // velocity lost per second, exponential
+            public float Grow;         // how many times its size it swells by
         }
 
         private static readonly List<Item> _items = new List<Item>();
@@ -55,17 +54,7 @@ namespace BombsAway
                     if (it.Delay > 0f) continue;
                 }
 
-                bool alive = it.Kind switch
-                {
-                    Kind.Fireball => TickFireball(it, dt),
-                    Kind.Smoke => TickSmoke(it, dt),
-                    Kind.Debris => TickDebris(it, dt),
-                    Kind.Fade => TickFade(it, dt),
-                    Kind.Plume => TickPlume(it, dt),
-                    _ => false,
-                };
-
-                if (!alive)
+                if (!TickPlume(it, dt))
                 {
                     Kill(it);
                     _items.RemoveAt(i);
@@ -73,60 +62,6 @@ namespace BombsAway
             }
         }
 
-        private static bool TickFireball(Item it, float dt)
-        {
-            it.Elapsed += dt;
-            float t = it.Elapsed / it.Duration;
-            it.Go.transform.localScale = Vector3.one * it.BaseScale * (1f + t * 0.6f);
-            it.Go.transform.position += Vector3.up * dt * 1.2f;
-            float a = Mathf.Pow(1f - t, 1.5f);
-            if (a < 0.02f) return false;
-            ApplyColor(it.Rend, WithAlpha(it.BaseColor, a));
-            ExplosionVFX.BillboardToCamera(it.Go);
-            return true;
-        }
-
-        private static bool TickSmoke(Item it, float dt)
-        {
-            it.Elapsed += dt;
-            float t = it.Elapsed / it.Duration;
-            float a = t < 0.2f ? Mathf.Lerp(0f, 0.75f, t / 0.2f) : Mathf.Lerp(0.75f, 0f, (t - 0.2f) / 0.8f);
-            if (a < 0.02f) return false;
-            it.Go.transform.localScale = Vector3.one * it.BaseScale * (1f + t * 1.8f);
-            it.Go.transform.position += Vector3.up * dt * it.RiseSpeed;
-            it.Go.transform.Rotate(Vector3.forward, dt * 8f);
-            ApplyColor(it.Rend, WithAlpha(it.BaseColor, a));
-            ExplosionVFX.BillboardToCamera(it.Go);
-            return true;
-        }
-
-        private static bool TickDebris(Item it, float dt)
-        {
-            it.Elapsed += dt;
-            float t = it.Elapsed / it.Duration;
-            it.Velocity += Vector3.up * it.Gravity * dt;
-            it.Go.transform.position += it.Velocity * dt;
-            it.Go.transform.Rotate(Vector3.forward, it.SpinRate * dt);
-            float a = t < 0.6f ? it.BaseColor.a : Mathf.Lerp(it.BaseColor.a, 0f, (t - 0.6f) / 0.4f);
-            if (a < 0.02f) return false;
-            ApplyColor(it.Rend, WithAlpha(it.BaseColor, a));
-            ExplosionVFX.BillboardToCamera(it.Go);
-            return true;
-        }
-
-        private static bool TickFade(Item it, float dt)
-        {
-            it.Elapsed += dt;
-            float a = Mathf.Lerp(it.BaseColor.a, 0f, it.Elapsed / it.Duration);
-            if (a < 0.02f) return false;
-            ApplyColor(it.Rend, WithAlpha(it.BaseColor, a));
-            return true;
-        }
-
-        /// <summary>
-        /// Thrown out fast and stopped by the air: velocity decays, the puff swells quickly and
-        /// then slowly, rises a little, and thins out.
-        /// </summary>
         private static bool TickPlume(Item it, float dt)
         {
             it.Elapsed += dt;
@@ -233,119 +168,6 @@ namespace BombsAway
             return m;
         }
 
-        // ── Entry points ──────────────────────────────────────────────────────────
-        public static void Spawn(Vector3 origin, RaycastHit groundHit)
-        {
-            if (Config.Dbg2) MelonLogger.Msg($"[VFX] Spawn origin={origin} ground={groundHit.point}");
-            SpawnFireball(origin);
-            SpawnSmoke(origin);
-            SpawnScorch(origin, groundHit);
-            SpawnDebris(origin);
-        }
-
-        public static void SpawnAerial(Vector3 origin)
-        {
-            if (Config.Dbg2) MelonLogger.Msg($"[VFX] SpawnAerial origin={origin}");
-            SpawnFireball(origin);
-            SpawnSmoke(origin);
-            SpawnDebris(origin);
-        }
-
-        // ── 2. Fireball ───────────────────────────────────────────────────────────
-        private static void SpawnFireball(Vector3 origin)
-        {
-            if (!Config.VFXActive) return;
-            float fbScale = Config.VFX(6f);         // fireball scale
-            float fbDur = Config.VFX(0.5f);       // fireball duration
-            if (Config.Dbg2) MelonLogger.Msg($"[VFX] SpawnFireball scale={fbScale}");
-            var matA = GetCachedMat("MuzzleFlash1");
-            var matB = GetCachedMat("MuzzleFlash3");
-            var colorA = new Color(1f, 0.5f, 0.1f, 0.95f);
-            var colorB = new Color(0.8f, 0.25f, 0.05f, 0.8f);
-
-            if (matA != null)
-                AddQuadItem(VfxRunner.Kind.Fireball, "VFX_Fireball_A", origin, Quaternion.identity,
-                    fbScale * 0.7f, matA, colorA, fbDur, 0f, 0f, 0f, Vector3.zero, 0f);
-
-            if (matB != null)
-                AddQuadItem(VfxRunner.Kind.Fireball, "VFX_Fireball_B", origin, Quaternion.identity,
-                    fbScale, matB, colorB, fbDur, 0.05f, 0f, 0f, Vector3.zero, 0f);
-        }
-
-        // ── 3. Smoke ──────────────────────────────────────────────────────────────
-        private static void SpawnSmoke(Vector3 origin)
-        {
-            if (!Config.VFXActive) return;
-            int count = Config.VFXInt(16);
-            float smokeScale = Config.VFX(2.5f);
-            float smokeDur = Config.VFX(5f);
-            float riseSpeed = Config.VFX(1.8f);
-            if (Config.Dbg2) MelonLogger.Msg($"[VFX] SpawnSmoke count={count}");
-            var mat = GetCachedMat("WFX_T_SmokeLoopAlpha");
-            if (mat == null) return;
-
-            for (int i = 0; i < Mathf.Max(1, count); i++)
-            {
-                float rx = (float)(SharedRng.Instance.NextDouble() - 0.5) * 1.2f;
-                float rz = (float)(SharedRng.Instance.NextDouble() - 0.5) * 1.2f;
-                float grey = 0.25f + (float)SharedRng.Instance.NextDouble() * 0.2f;
-                float scale = smokeScale * (0.8f + (float)SharedRng.Instance.NextDouble() * 0.5f);
-                float delay = (float)i / count * 0.3f;
-
-                AddQuadItem(VfxRunner.Kind.Smoke, "VFX_Smoke",
-                    origin + new Vector3(rx, 0.3f, rz),
-                    Quaternion.AngleAxis((float)SharedRng.Instance.NextDouble() * 360f, Vector3.up),
-                    scale, mat, new Color(grey, grey, grey, 0f), smokeDur, delay,
-                    riseSpeed, 0f, Vector3.zero, 0f);
-            }
-        }
-
-        // ── 4. Scorch ─────────────────────────────────────────────────────────────
-        private static void SpawnScorch(Vector3 origin, RaycastHit groundHit)
-        {
-            if (!Config.VFXActive) return;
-            if (groundHit.collider == null || ExplosionSystem.IsLimb(groundHit.collider.gameObject)) return;
-            float maxHeight = Config.VFX(2f);
-            float baseRadius = Config.VFX(1f);
-            float fadeTime = Config.VFX(30f);
-
-            float height = origin.y - groundHit.point.y;
-            if (Config.Dbg2) MelonLogger.Msg($"[VFX] SpawnScorch height={height:F2} max={maxHeight}");
-            if (height > maxHeight) { if (Config.Dbg2) MelonLogger.Msg("[VFX] Scorch: too high, skip"); return; }
-
-            float t = 1f - Mathf.Clamp01(height / maxHeight);
-            float radius = baseRadius * t;
-            if (radius < 0.1f) { if (Config.Dbg2) MelonLogger.Msg("[VFX] Scorch: radius too small, skip"); return; }
-
-            var layers = new[] {
-                ("Soft",             new Color(0.04f, 0.03f, 0.02f, t * 0.95f), 1.0f),
-                ("Default-Particle", new Color(0.10f, 0.08f, 0.05f, t * 0.5f),  1.3f),
-            };
-
-            foreach (var (texName, color, scaleMult) in layers)
-            {
-                var mat = GetCachedMat(texName);
-                if (mat == null) continue;
-
-                Vector3 pos = groundHit.point + groundHit.normal * (0.01f + scaleMult * 0.01f);
-                Quaternion rot = Quaternion.LookRotation(Vector3.forward, groundHit.normal)
-                                  * Quaternion.Euler(90f, 0f, 0f);
-                rot = Quaternion.AngleAxis((float)SharedRng.Instance.NextDouble() * 360f, groundHit.normal) * rot;
-
-                if (Config.Dbg2) MelonLogger.Msg($"[VFX] Scorch '{texName}' radius={radius:F2} scaleMult={scaleMult} pos={pos}");
-
-                var go = MakeQuad("VFX_Scorch", pos, rot, radius * 2f * scaleMult, mat);
-                VfxRunner.Add(new VfxRunner.Item
-                {
-                    Kind = VfxRunner.Kind.Fade,
-                    Go = go,
-                    Rend = go.GetComponent<Renderer>(),
-                    BaseColor = color,
-                    Duration = fadeTime,
-                });
-            }
-        }
-
         // ── Ballistic debris — 3D mesh chunks with dark smoke trails ────────────────
         // Chunks are pooled and share two materials; per-chunk grey and fade go through a
         // property block. Pooled objects die with the scene (see ResetForScene).
@@ -442,6 +264,9 @@ namespace BombsAway
             foreach (var c in _debrisPool)
                 if (c.Go != null) GameObject.Destroy(c.Go);
             _debrisPool.Clear();
+            // Rebuilt on the next blast, on whatever textures the new scene finds.
+            foreach (var m in _matCache.Values) if (m != null) GameObject.Destroy(m);
+            _matCache.Clear();
             _texCache.Clear();
             _texWarned.Clear();
             _texScanDone = false;
@@ -531,44 +356,6 @@ namespace BombsAway
             ReleaseDebris(chunk);
         }
 
-        private static readonly string[] DebrisTextures =
-            { "Medium01","Medium02","Medium03","Medium04","Medium05","Medium06","Thin01","Thin02","Large01" };
-
-        private static void SpawnDebris(Vector3 origin)
-        {
-            if (!Config.VFXActive) return;
-            int count = Config.VFXInt(18);
-            float speed = Config.VFX(6f);
-            float dur = Config.VFX(1.8f);
-            float dScale = Config.VFX(0.35f);
-            if (Config.Dbg2) MelonLogger.Msg($"[VFX] SpawnDebris count={count}");
-            float ga = Physics.gravity.y;
-            float goldenAngle = Mathf.PI * (3f - Mathf.Sqrt(5f));
-
-            for (int i = 0; i < Mathf.Max(1, count); i++)
-            {
-                float ft = (float)i / count;
-                float fy = Mathf.Lerp(0.1f, 1f, ft);
-                float frXZ = Mathf.Sqrt(Mathf.Max(0f, 1f - fy * fy));
-                var dir = new Vector3(frXZ * Mathf.Cos(i * goldenAngle), fy,
-                                         frXZ * Mathf.Sin(i * goldenAngle)).normalized;
-
-                float spd = speed * (0.6f + (float)SharedRng.Instance.NextDouble() * 0.8f);
-                float grey = 0.4f + (float)SharedRng.Instance.NextDouble() * 0.3f;
-                Color col = SharedRng.Instance.NextDouble() > 0.4
-                    ? new Color(grey, grey * 0.4f, grey * 0.1f, 0.9f)
-                    : new Color(grey * 0.3f, grey * 0.25f, grey * 0.2f, 0.85f);
-
-                var mat = GetCachedMat(DebrisTextures[SharedRng.Instance.Next(DebrisTextures.Length)]);
-                if (mat == null) continue;
-
-                float scale = dScale * (0.5f + (float)SharedRng.Instance.NextDouble() * 1f);
-
-                AddQuadItem(VfxRunner.Kind.Debris, "VFX_Debris", origin + dir * 0.3f,
-                    Quaternion.identity, scale, mat, col, dur, 0f, 0f, 0f, dir * spd, ga);
-            }
-        }
-
         // ── AT-4 backblast ────────────────────────────────────────────────────────
         // Out of the venturi, away from the muzzle: a jet of flame tongues, a cloud of smoke
         // and dust thrown back in a cone, and some of it spilling round the shooter into view
@@ -624,7 +411,7 @@ namespace BombsAway
             MelonCoroutines.Start(Flash(breech + back * 0.5f, 0.09f));
         }
 
-        private static float Rand(float a, float b) => a + (float)SharedRng.Instance.NextDouble() * (b - a);
+        private static float Rand(float a, float b) => UnityEngine.Random.Range(a, b);
 
         /// <summary>A direction within <paramref name="deg"/> of <paramref name="axis"/>.</summary>
         private static Vector3 Cone(Vector3 axis, float deg) =>
@@ -637,7 +424,7 @@ namespace BombsAway
             var go = MakeQuad(name, pos, Quaternion.identity, scale, mat);
             VfxRunner.Add(new VfxRunner.Item
             {
-                Kind = VfxRunner.Kind.Plume, Go = go, Rend = go.GetComponent<Renderer>(), BaseColor = color,
+                Go = go, Rend = go.GetComponent<Renderer>(), BaseColor = color,
                 Duration = duration, Delay = delay, BaseScale = scale, RiseSpeed = rise,
                 Velocity = velocity, Drag = drag, Grow = grow,
             });
@@ -663,27 +450,6 @@ namespace BombsAway
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────
-
-        private static void AddQuadItem(VfxRunner.Kind kind, string name, Vector3 pos, Quaternion rot,
-            float scale, Material mat, Color baseColor, float duration, float delay,
-            float riseSpeed, float spinRate, Vector3 velocity, float gravity)
-        {
-            var go = MakeQuad(name, pos, rot, scale, mat);
-            VfxRunner.Add(new VfxRunner.Item
-            {
-                Kind = kind,
-                Go = go,
-                Rend = go.GetComponent<Renderer>(),
-                BaseColor = baseColor,
-                Duration = duration,
-                Delay = delay,
-                BaseScale = scale,
-                RiseSpeed = riseSpeed,
-                SpinRate = spinRate,
-                Velocity = velocity,
-                Gravity = gravity,
-            });
-        }
 
         private static GameObject MakeQuad(string name, Vector3 pos,
                                             Quaternion rot, float scale, Material mat)

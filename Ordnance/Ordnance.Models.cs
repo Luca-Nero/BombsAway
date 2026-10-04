@@ -9,8 +9,7 @@ namespace BombsAway
     /// <summary>
     /// Ordnance models from the mod's asset bundle (Bundles/bombsaway.bundle, embedded). Each
     /// prefab is a root with a convex MeshCollider and a Rigidbody, and one child per moving
-    /// part (grenade: Body, Spoon, Pin) so later animations can drive them. A bundle that fails
-    /// to load leaves grey primitives in the world and nothing in the hand.
+    /// part (grenade: Body, Spoon, Pin) so later animations can drive them.
     /// </summary>
     internal static class OrdnanceModels
     {
@@ -42,8 +41,6 @@ namespace BombsAway
             _                => PrefabName(o),
         };
 
-        internal static bool Has(Ordnance o) => Prefab(o) != null;
-
         /// <summary>The bundled prefab, or null if the bundle has none.</summary>
         internal static GameObject Prefab(Ordnance o) => Load(PrefabName(o));
 
@@ -58,7 +55,7 @@ namespace BombsAway
             if (_loadTried) return;
             _loadTried = true;
             try { _bundle = FruitBundle.FromResource(Assembly.GetExecutingAssembly(), BundleResource); }
-            catch (System.Exception e) { MelonLogger.Warning($"[Models] {BundleResource} failed to load, using plain primitives: {e.Message}"); }
+            catch (System.Exception e) { MelonLogger.Warning($"[Models] {BundleResource} failed to load: {e.Message}"); }
         }
 
         private static GameObject Load(string name)
@@ -91,15 +88,13 @@ namespace BombsAway
         }
 
         /// <summary>
-        /// The HE copy of a projectile's atlas on its (already copied) body material, so the
+        /// The HE or TBX copy of a projectile's atlas on its (already copied) body material, so the
         /// stencil on it says what it carries. Painted by the model scripts next to the HEAT one.
         /// </summary>
         internal static void PaintWarhead(Ordnance o, GameObject obj, WarheadMode w)
         {
             if (w == WarheadMode.HEAT || obj == null) return;   // the prefab's own atlas
             var tex = Texture(PrefabName(o) + "_Albedo_" + w);
-            // No TBX atlas in an older bundle: at least not the HEAT stencil.
-            if (tex == null && w == WarheadMode.TBX) tex = Texture(PrefabName(o) + "_Albedo_HE");
             var body = obj.transform.Find("Body");
             var r = body != null ? body.GetComponent<Renderer>() : null;
             if (tex != null && r != null && r.sharedMaterial != null) r.sharedMaterial.SetTexture("_BaseMap", tex);

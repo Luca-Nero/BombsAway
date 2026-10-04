@@ -29,15 +29,10 @@ namespace BombsAway
         /// <summary>You on the net.</summary>
         public static void Observer(string text) => Say("OBS", text, false);
 
-        /// <summary>The battery's fire direction centre.</summary>
-        public static void Battery(string text) => Say("FDC", text, true);
-
         /// <summary>A firing unit's station by its call sign (FDC for the 155 battery, MTR for the mortars).</summary>
         public static void Unit(string who, string text) => Say(who, text, true);
 
         private static void Say(string who, string text, bool fdc) => _queue.Enqueue(new Line { Who = who, Text = text.ToUpperInvariant(), Fdc = fdc });
-
-        public static bool Busy => _queue.Count > 0 || Time.time < _freeAt;
 
         private static float Rate => Mathf.Max(5f, Config.RadioTypeRate);
 

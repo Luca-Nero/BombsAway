@@ -135,6 +135,27 @@ namespace BombsAway
                 a.Effector.rotation = Quaternion.Slerp(a.Effector.rotation, HandRotation(a), turnW);
         }
 
+        private static readonly List<System.IntPtr> _armsGone = new List<System.IntPtr>();
+
+        /// <summary>
+        /// Once a frame: entries whose arm can no longer reach ShapeArm. Only the postfix forgets an
+        /// arm, so a body deleted mid-cover (its placer gone, the hook never called again) would keep
+        /// its entry until the scene changes, and a new placer at the same address would inherit it.
+        /// </summary>
+        private static void PruneArms()
+        {
+            float now = Time.time;
+            _armsGone.Clear();
+            foreach (var kv in _arms)
+            {
+                var a = kv.Value;
+                if (a.BendGoal == null || a.Effector == null || a.Body.Puppeteer == null
+                    || (a.ReleasedAt >= 0f && now - a.ReleasedAt > Release + 1f))
+                    _armsGone.Add(kv.Key);
+            }
+            foreach (var key in _armsGone) Forget(key, _arms[key]);
+        }
+
         private static void Forget(System.IntPtr key, ArmHold a)
         {
             try { if (a.BendGoal != null) a.BendGoal.localPosition = a.BendRest; } catch { }

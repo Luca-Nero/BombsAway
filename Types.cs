@@ -6,11 +6,6 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace BombsAway
 {
-    internal static class SharedRng
-    {
-        public static readonly System.Random Instance = new System.Random();
-    }
-
     internal static class CameraCache
     {
         private static Camera _cam;

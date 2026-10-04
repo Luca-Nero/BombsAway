@@ -10,7 +10,7 @@ using Vector3 = UnityEngine.Vector3;
 namespace BombsAway
 {
     /// <summary>
-    /// The rockets: Hydra 70 (2.75 in) from an AH-64 (GUNFIGHTER, a stand-in Apache). It comes
+    /// The rockets: Hydra 70 (2.75 in) from an AH-64 (GUNFIGHTER, an Apache). It comes
     /// in low across your line of sight, noses into a shallow running dive (RocketDiveAngle) and
     /// fires a pair every RocketPairInterval, one from each M261 pod, the first from
     /// RocketFireRange out, then breaks away from your side.
@@ -142,7 +142,7 @@ namespace BombsAway
             var s = new Strike
             {
                 Number = FireMission.NextNumber(), Type = k.Type, Sign = HeloSign, CraftKind = Airframe.AH64,
-                Mark = mark, Heading = heading, Right = right, Term = term,
+                Mark = mark, Heading = heading, Term = term,
                 FireAt = fireAt, BurstEnd = lastLaunch, InAt = fireAt - 5f,
                 R = new RocketRun { K = k },
             };
@@ -539,47 +539,24 @@ namespace BombsAway
             _dartDust.Clear();
         }
 
-        // ── The stand-ins ───────────────────────────────────────────────────────
+        // ── The models ──────────────────────────────────────────────────────────
 
-        private static Material _odMat, _discMat;
+        private static Material _discMat;
 
         /// <summary>
-        /// A Hydra 70: the bundle's HydraHE / HydraFLC (5.24.0, 1.2x real, the motor's flame hung
-        /// behind its Nozzle marker), or a stand-in out of boxes at its real size (70 mm, about
-        /// 1.4 m with its warhead): the Mk 66 motor, the warhead (HE: olive with the yellow band of
-        /// a live filling; flechette: olive with a light band), the fuze, four wrap-around fins,
-        /// and the motor's flame while it burns.
+        /// A Hydra 70: the bundle's HydraHE / HydraFLC (5.24.0, 1.2x real), the motor's flame hung
+        /// behind its Nozzle marker while it burns.
         /// </summary>
         private static GameObject BuildRocket(bool darts, out Transform flame)
         {
             EnsureMats();
             var model = SpawnBare(darts ? "HydraFLC" : "HydraHE");
-            if (model != null)
-            {
-                model.name = darts ? "BA_M255" : "BA_M151";
-                var nozzle = model.transform.Find("Nozzle");
-                Vector3 at = (nozzle != null ? nozzle.localPosition : new Vector3(0f, 0f, -0.87f)) + new Vector3(0f, 0f, -0.2f);
-                flame = Part(model.transform, PrimitiveType.Cube, at, new Vector3(0.12f, 0.12f, 0.4f), _flashMat);
-                flame.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                return model;
-            }
-            if (_odMat == null) _odMat = new Material(Config.FindShader()) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(0.185f, 0.195f, 0.165f) };   // od
-            if (_yelMat == null) _yelMat = new Material(Config.FindShader()) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(0.82f, 0.59f, 0f) };     // yel
-            var root = new GameObject(darts ? "BA_M255" : "BA_M151");
-            root.layer = 2;
-            var t = root.transform;
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, -0.2f), new Vector3(0.07f, 0.07f, 1.06f), _bodyMat);    // motor
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.52f), new Vector3(0.072f, 0.072f, 0.4f), _odMat);     // warhead
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.42f), new Vector3(0.075f, 0.075f, 0.05f), darts ? _darkMat : _yelMat);   // its band
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0.77f), new Vector3(0.04f, 0.04f, 0.1f), _darkMat);     // fuze
-            for (int i = 0; i < 2; i++)
-            {
-                var fin = Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, -0.68f), new Vector3(0.012f, 0.24f, 0.1f), _darkMat);
-                fin.localRotation = Quaternion.Euler(0f, 0f, 45f + 90f * i);
-            }
-            flame = Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, -0.9f), new Vector3(0.1f, 0.1f, 0.4f), _flashMat);
+            model.name = darts ? "BA_M255" : "BA_M151";
+            var nozzle = model.transform.Find("Nozzle");
+            Vector3 at = (nozzle != null ? nozzle.localPosition : new Vector3(0f, 0f, -0.87f)) + new Vector3(0f, 0f, -0.2f);
+            flame = Part(model.transform, PrimitiveType.Cube, at, new Vector3(0.12f, 0.12f, 0.4f), _flashMat);
             flame.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            return root;
+            return model;
         }
 
         /// <summary>The Mk 66's smoke trail, on its own object so it fades out after the rocket is gone.</summary>
@@ -602,83 +579,22 @@ namespace BombsAway
 
         /// <summary>
         /// The bundle's AH64 (5f, 1.2x real): its Rotor turns about local Y over a faint disc, its
-        /// TailRotor about local X. Without it, the box stand-in below.
+        /// TailRotor about local X.
         /// </summary>
         private static void BuildAH64(Strike s)
         {
-            EnsureMats();
             if (_discMat == null) _discMat = new Material(Config.FindSpriteShader()) { hideFlags = HideFlags.DontUnloadUnusedAsset, color = new Color(0.12f, 0.12f, 0.13f, 0.16f) };
             var model = SpawnBare("AH64");
-            if (model != null)
+            s.Rotor = model.transform.Find("Rotor");
+            s.TailRotor = model.transform.Find("TailRotor");
+            if (s.Rotor != null)
             {
-                s.Rotor = model.transform.Find("Rotor");
-                s.TailRotor = model.transform.Find("TailRotor");
-                if (s.Rotor != null)
-                {
-                    s.RotorRest = s.Rotor.localRotation;
-                    var d = Part(model.transform, PrimitiveType.Cylinder, s.Rotor.localPosition, new Vector3(17.56f, 0.005f, 17.56f), _discMat);
-                    d.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                }
-                if (s.TailRotor != null) s.TailRotorRest = s.TailRotor.localRotation;
-                s.Craft = model;
-                return;
+                s.RotorRest = s.Rotor.localRotation;
+                var d = Part(model.transform, PrimitiveType.Cylinder, s.Rotor.localPosition, new Vector3(17.56f, 0.005f, 17.56f), _discMat);
+                d.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
-            BuildAH64Boxes(s);
-        }
-
-        /// <summary>
-        /// An AH-64 out of boxes at its real size (15.5 m fuselage and boom, 14.6 m rotor), when
-        /// the bundle has no model: the narrow fuselage with its tandem canopy, the chin sensor
-        /// turret and gun, engine nacelles either side of the mast, stub wings with an M261 pod
-        /// outboard and a rail inboard on each, the tail boom, fin, stabilator and the tail rotor
-        /// on its left, and the four-bladed main rotor turning over a faint disc.
-        /// </summary>
-        private static void BuildAH64Boxes(Strike s)
-        {
-            var root = new GameObject("BA_AH64");
-            root.layer = 2;
-            var t = root.transform;
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0f, 0f), new Vector3(1.3f, 1.9f, 7f), _bodyMat);           // fuselage
-            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.1f, 4.2f), new Vector3(1f, 1.5f, 2.2f), _bodyMat);       // nose
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.65f, 3.7f), new Vector3(0.9f, 0.7f, 2.8f), _darkMat);     // canopy, two seats in tandem
-            Part(t, PrimitiveType.Cube, new Vector3(0f, -0.7f, 5.5f), new Vector3(0.6f, 0.6f, 0.6f), _darkMat);     // the sensor turret
-            Part(t, PrimitiveType.Cube, new Vector3(0f, -1.15f, 3.4f), new Vector3(0.15f, 0.15f, 1.6f), _darkMat); // the chin gun
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.25f, -6.2f), new Vector3(0.55f, 0.75f, 5.6f), _bodyMat); // tail boom
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.4f, -8.8f), new Vector3(0.18f, 2.4f, 1.3f), _bodyMat);   // fin
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 0.1f, -8.9f), new Vector3(3.2f, 0.1f, 0.8f), _bodyMat);    // stabilator
-            Part(t, PrimitiveType.Cube, new Vector3(0f, 1.35f, 0.4f), new Vector3(0.3f, 0.7f, 0.3f), _darkMat);    // mast
-            for (int side = -1; side <= 1; side += 2)
-            {
-                Part(t, PrimitiveType.Cube, new Vector3(side * 0.95f, 0.75f, -0.6f), new Vector3(0.65f, 0.75f, 2.6f), _bodyMat);   // engine nacelles
-                Part(t, PrimitiveType.Cube, new Vector3(side * 1.9f, -0.1f, 0.3f), new Vector3(2.6f, 0.15f, 1.1f), _bodyMat);      // stub wings
-                Part(t, PrimitiveType.Cube, new Vector3(side * PodRight, -PodDown, PodAhead), new Vector3(0.42f, 0.42f, 1.7f), _darkMat);   // M261 pods
-                Part(t, PrimitiveType.Cube, new Vector3(side * 1.4f, -0.4f, 0.3f), new Vector3(0.2f, 0.3f, 1.4f), _darkMat);      // rails
-            }
-
-            var rotor = new GameObject("Rotor");
-            rotor.layer = 2;
-            rotor.transform.SetParent(t, false);
-            rotor.transform.localPosition = new Vector3(0f, 1.78f, 0.4f);
-            for (int i = 0; i < 2; i++)
-            {
-                var blade = Part(rotor.transform, PrimitiveType.Cube, Vector3.zero, new Vector3(14.6f, 0.05f, 0.53f), _darkMat);
-                blade.localRotation = Quaternion.Euler(0f, 90f * i, 0f);
-            }
-            var disc = Part(t, PrimitiveType.Cylinder, new Vector3(0f, 1.78f, 0.4f), new Vector3(14.6f, 0.005f, 14.6f), _discMat);
-            disc.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            s.Rotor = rotor.transform;
-
-            var tail = new GameObject("TailRotor");
-            tail.layer = 2;
-            tail.transform.SetParent(t, false);
-            tail.transform.localPosition = new Vector3(-0.32f, 1.9f, -9.05f);
-            for (int i = 0; i < 2; i++)
-            {
-                var blade = Part(tail.transform, PrimitiveType.Cube, Vector3.zero, new Vector3(0.03f, 2.8f, 0.2f), _darkMat);
-                blade.localRotation = Quaternion.Euler(90f * i, 0f, 0f);
-            }
-            s.TailRotor = tail.transform;
-            s.Craft = root;
+            if (s.TailRotor != null) s.TailRotorRest = s.TailRotor.localRotation;
+            s.Craft = model;
         }
 
         /// <summary>The helicopter flies nose down, its rotors turning at their real speed.</summary>

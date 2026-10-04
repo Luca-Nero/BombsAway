@@ -15,14 +15,13 @@ namespace BombsAway
     internal static class ConfigLoader
     {
         public static string IniPath => FruitLib.FruitPaths.Config("GrenadeConfig.ini", typeof(ConfigLoader).Assembly);
-        private static string ConfigPath => IniPath;
 
         public static void Load()
         {
             try
             {
-                if (!File.Exists(ConfigPath)) { Write(); MelonLogger.Msg("Wrote default GrenadeConfig.ini"); return; }
-                foreach (var line in File.ReadAllLines(ConfigPath))
+                if (!File.Exists(IniPath)) { Write(); MelonLogger.Msg("Wrote default GrenadeConfig.ini"); return; }
+                foreach (var line in File.ReadAllLines(IniPath))
                 {
                     string t = line.Trim();
                     if (string.IsNullOrEmpty(t) || t.StartsWith("#")) continue;
@@ -480,7 +479,7 @@ namespace BombsAway
                 sb.AppendLine();
             }
 
-            FruitLib.FruitPaths.WriteAllTextAtomic(ConfigPath, sb.ToString());
+            FruitLib.FruitPaths.WriteAllTextAtomic(IniPath, sb.ToString());
         }
 
         private static string FormatValue(FieldInfo f)

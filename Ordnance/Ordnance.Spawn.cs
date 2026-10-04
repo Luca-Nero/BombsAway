@@ -8,30 +8,6 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace BombsAway
 {
-    internal static class OrdnanceFactory
-    {
-        /// <summary>A grey primitive standing in for a charge the bundle has no model for (it failed to load).</summary>
-        public static GameObject BuildFallback(string objName, Vector3 position, PrimitiveType primitive,
-            out Renderer renderer, out Material[] materials)
-        {
-            materials = new Material[0];
-            var obj = GameObject.CreatePrimitive(primitive);
-            obj.name = objName;
-            obj.transform.position = position;
-            obj.transform.localScale = Vector3.one * 0.2f;
-
-            renderer = obj.GetComponent<Renderer>();
-            if (renderer != null)
-            {
-                var mat = new Material(Config.FindShader());
-                mat.color = Color.grey;
-                renderer.material = mat;
-                materials = new[] { mat };
-            }
-            return obj;
-        }
-    }
-
     public partial class Core
     {
         private static Color[] SnapshotBaseColors(Material[] mats)
@@ -57,35 +33,31 @@ namespace BombsAway
         /// Throwing and placing both start here; only what happens next differs.</summary>
         private static GrenadeState CreateOrdnance(Ordnance o, Vector3 position)
         {
-            ExplosionParams ep; string name; float mass; PrimitiveType fallback;
+            ExplosionParams ep; string name; float mass;
             switch (o)
             {
                 case Ordnance.C4:
                     ep = ExplosionParams.FromC4Config(Vector3.zero);
-                    name = "C4"; mass = 0.75f; fallback = PrimitiveType.Sphere; break;
+                    name = "C4"; mass = 0.75f; break;
                 case Ordnance.Claymore:
                     ep = ExplosionParams.FromClaymoreConfig(Vector3.zero);
-                    name = "Claymore"; mass = 0.75f; fallback = PrimitiveType.Cube; break;
+                    name = "Claymore"; mass = 0.75f; break;
                 case Ordnance.Smoke:
                     ep = ExplosionParams.FromSmokeConfig(Vector3.zero);
-                    name = "SmokeGrenade"; mass = 0.55f; fallback = PrimitiveType.Cylinder; break;
+                    name = "SmokeGrenade"; mass = 0.55f; break;
                 case Ordnance.Flash:
                     ep = ExplosionParams.FromFlashConfig(Vector3.zero);
-                    name = "Flashbang"; mass = 0.4f; fallback = PrimitiveType.Cylinder; break;
+                    name = "Flashbang"; mass = 0.4f; break;
                 default:
                     ep = ExplosionParams.FromGrenadeConfig(Vector3.zero);
-                    name = "Grenade"; mass = 0.5f; fallback = PrimitiveType.Sphere; break;
+                    name = "Grenade"; mass = 0.5f; break;
             }
 
             var obj = OrdnanceModels.Spawn(o, position, out Renderer rend, out Material[] mats);
-            if (obj != null)
-            {
-                obj.name = name;
-                // Thrown or placed, a live grenade is the body alone: the pin and spoon stayed
-                // with the hand (Ordnance.Held.cs lets them fall).
-                OrdnanceModels.StripLooseParts(obj);
-            }
-            else obj = OrdnanceFactory.BuildFallback(name, position, fallback, out rend, out mats);
+            obj.name = name;
+            // Thrown or placed, a live grenade is the body alone: the pin and spoon stayed
+            // with the hand (Ordnance.Held.cs lets them fall).
+            OrdnanceModels.StripLooseParts(obj);
 
             if (o == Ordnance.Smoke) TintBand(obj.transform, SmokeColour);
 

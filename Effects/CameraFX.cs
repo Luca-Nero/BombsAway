@@ -22,6 +22,8 @@ namespace BombsAway
         private static bool _ppResolved = false;
         private static float _baseChroma = 0f;
         private static float _baseVignette = 0f;
+        private static float _punch = 0f;                 // chroma/vignette punch, 0..1, fades in Tick
+        private const float PunchDuration = 0.45f;        // seconds until the punch has all but faded
 
         /// <param name="reach">Scales how far off a blast still shakes (a big bomb's reaches far).</param>
         public static void AddTrauma(Vector3 blastOrigin, float scale = 1f, float reach = 1f)
@@ -59,12 +61,13 @@ namespace BombsAway
             if (Config.Dbg2) MelonLogger.Msg($"[CAM] _trauma={_trauma:F3}");
 
             ResolvePP();
-            MelonCoroutines.Start(PunchPP(trauma));
+            _punch = Mathf.Max(_punch, Mathf.Min(1f, trauma));   // a kick over a fading one restarts it, never stacks
         }
 
         public static void Tick(float dt)
         {
             if (!Config.CamFXActive) return;
+            TickPunch(dt);
             try
             {
                 if (_trauma <= 0f) return;
@@ -183,49 +186,27 @@ namespace BombsAway
             if (Config.Dbg2) MelonLogger.Msg($"[CAM] PP ready chroma={_chroma != null}(base={_baseChroma:F3}) vignette={_vignette != null}(base={_baseVignette:F3})");
         }
 
-        private static System.Collections.IEnumerator PunchPP(float traumaScale)
+        /// <summary>Fades the chromatic aberration and vignette punch: one value for every kick,
+        /// so a gun run's hundred hits a second write it once a frame.</summary>
+        private static void TickPunch(float dt)
         {
-            if (Config.Dbg2) MelonLogger.Msg($"[CAM] PunchPP traumaScale={traumaScale:F3}");
+            if (_punch <= 0f) return;
+            _punch *= Mathf.Exp(-dt * 4f / Mathf.Max(0.05f, Config.CamFX(PunchDuration)));
+            if (_punch < 0.002f) _punch = 0f;
             try
             {
                 if (_chroma != null)
                 {
-                    float peak = Config.CamFX(0.1f) * traumaScale;    // chroma intensity
-                    if (Config.Dbg2) MelonLogger.Msg($"[CAM] Chroma: base={_baseChroma:F3} peak={peak:F3}");
-                    MelonCoroutines.Start(PunchFloat(
-                        v => { _chroma.active = true; _chroma.intensity.overrideState = true; _chroma.intensity.value = v; },
-                        _baseChroma, peak, Config.CamFX(0.4f)));      // chroma duration
+                    _chroma.active = true; _chroma.intensity.overrideState = true;
+                    _chroma.intensity.value = _baseChroma + Config.CamFX(0.1f) * _punch;      // chroma intensity
                 }
-                else MelonLogger.Warning("[CAM] Chroma null");
-            }
-            catch (Exception e) { MelonLogger.Warning($"[CAM] Chroma ex: {e.Message}"); }
-
-            try
-            {
                 if (_vignette != null)
                 {
-                    float peak = Config.CamFX(0.05f) * traumaScale;   // vignette intensity
-                    if (Config.Dbg2) MelonLogger.Msg($"[CAM] Vignette: base={_baseVignette:F3} peak={peak:F3}");
-                    MelonCoroutines.Start(PunchFloat(
-                        v => { _vignette.active = true; _vignette.intensity.overrideState = true; _vignette.intensity.value = v; },
-                        _baseVignette, peak, Config.CamFX(0.5f)));    // vignette duration
+                    _vignette.active = true; _vignette.intensity.overrideState = true;
+                    _vignette.intensity.value = _baseVignette + Config.CamFX(0.05f) * _punch; // vignette intensity
                 }
-                else MelonLogger.Warning("[CAM] Vignette null");
             }
-            catch (Exception e) { MelonLogger.Warning($"[CAM] Vignette ex: {e.Message}"); }
-
-            yield break;
-        }
-
-        private static System.Collections.IEnumerator PunchFloat(
-            Action<float> setter, float baseline, float peak, float duration)
-        {
-            float elapsed = 0f, punchIn = duration * 0.2f;
-            while (elapsed < punchIn) { elapsed += Time.deltaTime; setter(Mathf.Lerp(baseline, peak, elapsed / punchIn)); yield return null; }
-            elapsed = 0f;
-            float rest = duration * 0.8f;
-            while (elapsed < rest) { elapsed += Time.deltaTime; setter(Mathf.Lerp(peak, baseline, elapsed / rest)); yield return null; }
-            setter(baseline);
+            catch (Exception e) { MelonLogger.Warning($"[CAM] punch: {e.Message}"); _punch = 0f; }
         }
     }
 }
