@@ -306,6 +306,21 @@ namespace BombsAway
         public static float AirTimeOnTarget = 18f;
         public static float AirAttackHeading = -1f;
         public static float AirDangerClose = 100f;
+        // 5.25.0: each strike plans its own approach at the call (AirStrike.Approach.cs). Attack
+        // axes all round the mark and several dive (or impact) angles are tried by casting lines
+        // from the mark back along them: the ones that reach it, keep their hits from walking at
+        // you and differ from the last strike are favoured, with AirApproachVariance of chance on
+        // top. A mark under cover gets the axis through the least of it (a JDAM its delay fuze).
+        // The aircraft comes in from a varied bearing and turns onto its run-in (up to
+        // AirEntryTurnMax), and after the attack either breaks away before the mark or flies on
+        // over it (AirOverflyChance, jets only). Its whole flight is checked against the world.
+        // Off: the 5.24 approaches (across your line of sight; the bombs' bearing per scene).
+        // AirAttackHeading / JdamHeading 0-360 still fix the heading either way.
+        [FruitLib.MenuCategory("Fire Support")] public static bool AirDynamicApproach = true;
+        public static float AirApproachVariance = 0.35f;   // 0 = always the best-scoring approach
+        public static float AirOverflyChance = 0.5f;
+        public static float AirEntryTurnMax = 110f;        // degrees
+        public static bool JdamDelayFuze = true;           // a JDAM on a mark under cover goes through it and off at the mark
         public static float Gun30RateOfFire = 3900f;
         public static float Gun30Speed = 160f;
         public static float Gun30DiveAngle = 20f;
@@ -719,6 +734,9 @@ namespace BombsAway
         public static bool DebugDrawBlast = true;
         // Live lines and labels on every body covering its face (Flashbang.Diagnostics.cs).
         [FruitLib.MenuCategory("Debug")] public static bool DebugDrawFlashArms = false;
+        // An air strike's plan, drawn until it's over: the reach lines tried from the mark (green
+        // reach it, red don't), the chosen axis (yellow) and the aircraft's whole flight (cyan).
+        [FruitLib.MenuCategory("Debug")] public static bool DebugDrawAirPlan = false;
         public static int FragLayerMask  = ~0;
         public static int WorldLayerMask = ~0;
         // Test bench: a row of walls to shoot at (Debug/TestBench.cs). Shift+key clears it.

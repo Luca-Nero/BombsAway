@@ -115,22 +115,29 @@ namespace BombsAway
 
             float now = Time.time;
             float speed = Mathf.Max(20f, Config.RocketRunSpeed);
-            float dive = Mathf.Clamp(Config.RocketDiveAngle, 0f, 30f) * Mathf.Deg2Rad;
-            Vector3 heading = AttackHeading(mark, observer);
-            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
-            Vector3 down = (heading * Mathf.Cos(dive) + Vector3.down * Mathf.Sin(dive)).normalized;
-            int hdg = Mathf.RoundToInt(Mathf.Repeat(Mathf.Atan2(heading.x, heading.z) * Mathf.Rad2Deg, 360f)) % 360;
             bool danger = Vector3.Distance(mark, observer) < Config.RocketDangerClose;
+            int pairs = (k.Count + 1) / 2;
+            float interval = Mathf.Max(0.05f, Config.RocketPairInterval);
+            float firing = (pairs - 1) * interval + (k.Count > 1 ? PodStagger : 0f);   // first launch to last
+
+            // The approach (AirStrike.Approach.cs); its flight is worked out firing at t = 0, then moved to the clock.
+            float range = Mathf.Max(400f, Config.RocketFireRange);
+            var plan = PlanRockets(Mathf.Clamp(Config.RocketDiveAngle, 0f, 30f), mark, observer, danger, p =>
+            {
+                Vector3 dn = Descending(p.Heading, p.Angle);
+                return BuildRun(mark - dn * range, dn, p.Heading, speed, 0f, firing + HeloHold, p.Away, 1.6f, HeloClimb, p.Shape);
+            }, out Path path);
+            Vector3 heading = plan.Heading;
+            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
+            int hdg = Mathf.RoundToInt(plan.Az) % 360;
 
             // On the terminal the helicopter is spawned where its run begins and the call is made
             // once its program is up: the whole timeline starts from there.
-            var term = OpenTerminal(k.Code, danger, mark, mark - heading * (Mathf.Max(400f, Config.RocketFireRange) * Mathf.Cos(dive) + speed * (DiveTime + Approach)),
-                                    heading, grid, HeloCallsign, k.Count, ammo, weapon, CraftName(Airframe.AH64));
-            if (term != null) now += FireTerminal.Play(term, "spawn", "boot", "wake", "call");
-            int pairs = (k.Count + 1) / 2;
-            float interval = Mathf.Max(0.05f, Config.RocketPairInterval);
+            var term = OpenTerminal(k.Code, danger, mark, path.Pos[0], heading, grid, HeloCallsign, k.Count, ammo, weapon, CraftName(Airframe.AH64));
+            SetPlanWords(term, plan, path);
+            if (term != null) now += FireTerminal.Play(term, CallSteps(plan));
             float fireAt = now + Mathf.Max(12f, Config.AirTimeOnTarget);
-            float lastLaunch = fireAt + (pairs - 1) * interval + (k.Count > 1 ? PodStagger : 0f);
+            float lastLaunch = fireAt + firing;
 
             var s = new Strike
             {
@@ -140,11 +147,8 @@ namespace BombsAway
                 R = new RocketRun { K = k },
             };
 
-            // It breaks off away from your side of its run.
-            float side = Vector3.Dot(observer - mark, right);
-            Vector3 away = Quaternion.AngleAxis(side > 0f ? -TurnAway : TurnAway, Vector3.up) * heading;
-            Vector3 m0 = mark - down * Mathf.Max(400f, Config.RocketFireRange);
-            s.Path = BuildRun(m0, down, heading, speed, fireAt, lastLaunch + HeloHold, away, 1.6f, HeloClimb);
+            path.T0 += fireAt;
+            s.Path = path;
             s.Engine = new PathSound { Key = "HeloAH64Loop", From = s.Path.T0, To = s.Path.End, FadeIn = 3f, FadeOut = 3f };
 
             // The rockets: a pair every interval, left pod then right. HE walks along the heading
@@ -186,7 +190,7 @@ namespace BombsAway
             string rockets = k.Count == 1 ? "rocket" : "rockets";
             term?.Set("OFF", offWord);
             if (term == null) RadioLog.Observer($"{HeloCallsign}, grid {grid}. {(danger ? "Danger close. " : "")}Rockets, {rds}, heading {hdg:000}. Over.");
-            Say(s, now + 3f, false, $"Grid {grid}, {rds} {rockets}, heading {hdg:000}.", "readback");
+            Say(s, now + 3f, false, $"Grid {grid}, {rds} {rockets}, heading {hdg:000}.{PlanWords(plan, false)}", "readback");
             Say(s, now + 3f, true, "Readback correct.");
             Say(s, fireAt - 11f, false, "Inbound.", "inbound");
             Say(s, fireAt - 11f, true, "Continue.");
@@ -198,7 +202,8 @@ namespace BombsAway
             s.CompleteAt = lastImpact + 3f;
 
             _strikes.Add(s);
-            if (Config.Dbg1) MelonLogger.Msg($"[Air] mission {s.Number} ({k.Code}) at {mark} grid {grid}, heading {hdg}, fires in {fireAt - now:F1}s from {m0}, {k.Count} rockets, last down in {lastImpact - now:F1}s");
+            s.PlanDraw = DrawPlan(plan, path, mark);
+            LogPlan(s, plan, now);
             return true;
         }
 

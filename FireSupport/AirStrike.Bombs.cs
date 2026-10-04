@@ -124,6 +124,9 @@ namespace BombsAway
             public bool Released, Done;
             public PathSound Fall;
             public Cluster C;                      // a CBU's: where it opens and its bomblets
+            public bool Delay;                     // a JDAM under cover: through what it meets on the way, off at the mark (JdamDelayFuze)
+            public Vector3 Aim;                    // where it was aimed (the mark, spread by the CEP)
+            public int Punched;                    // surfaces it went through
             public BombFins Fins;                  // the model's grid fins or pop-out fins, springing out after the release
         }
 
@@ -187,11 +190,6 @@ namespace BombsAway
                 return false;
             }
 
-            if (_bombBearing < 0f) _bombBearing = Config.JdamHeading >= 0f ? Mathf.Repeat(Config.JdamHeading, 360f) : Random.Range(0f, 360f);
-            float deg = _bombBearing + Random.Range(-4f, 4f);
-            Vector3 heading = new Vector3(Mathf.Sin(deg * Mathf.Deg2Rad), 0f, Mathf.Cos(deg * Mathf.Deg2Rad));
-            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
-
             // GPS: a circular normal spread whose median miss is the CEP (sigma = CEP / 1.1774).
             float sigma = Mathf.Max(0f, k.Cep) / 1.1774f;
             Vector3 aim = mark + new Vector3(Gauss(), 0f, Gauss()) * sigma;
@@ -199,11 +197,29 @@ namespace BombsAway
             float now = Time.time;
             bool herc = k.Craft == Airframe.C130;
             float v0 = herc ? Mathf.Clamp(Config.MoabCarrierSpeed, 50f, 160f) : Mathf.Max(80f, Config.JdamSpeed);
-            float range = herc ? Config.MoabReleaseRange : Config.JdamReleaseRange;
+            float range = Mathf.Max(300f, herc ? Config.MoabReleaseRange : Config.JdamReleaseRange);
+            float alt = Mathf.Max(200f, Config.JdamReleaseAltitude);
             float v1 = Mathf.Clamp(k.ImpactSpeed, 100f, SpeedOfSound * 0.93f);   // its sound rides it: under the speed of sound
-            float steep = Mathf.Clamp(k.ImpactAngle, 30f, 89f) * Mathf.Deg2Rad;
-            Vector3 terminal = (heading * Mathf.Cos(steep) + Vector3.down * Mathf.Sin(steep)).normalized;
-            Vector3 release = aim - heading * Mathf.Max(300f, range) + Vector3.up * Mathf.Max(200f, Config.JdamReleaseAltitude);
+
+            // The approach (AirStrike.Approach.cs): the axis the bomb arrives along and the jet's
+            // run-in, entry and egress; the flight is worked out releasing at t = 0, then moved to the clock.
+            var plan = PlanDrop(k, mark, observer, p =>
+            {
+                Vector3 rel = aim - p.Heading * range + Vector3.up * alt;
+                if (herc)
+                {
+                    // The C-130 flies on over its drop and turns off gently past it.
+                    if (p.Shape != null) { p.Shape.OverflyPast = 300f; p.Shape.OverflyClimb = 3f; p.Shape.OverflyG = 1.25f; }
+                    return BuildRun(rel, p.Heading, p.Heading, v0, 0f, HercTurnAfter, p.Away, 1.2f, 6f, p.Shape);
+                }
+                if (p.Shape != null) { p.Shape.OverflyPast = 900f; p.Shape.OverflyClimb = 5f; p.Shape.OverflyG = 3f; }
+                return BuildRun(rel, p.Heading, p.Heading, v0, 0f, 2.5f, p.Away, 3f, ClimbAngle, p.Shape);
+            }, out Path path);
+            Vector3 heading = plan.Heading;
+            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
+            float deg = plan.Az;
+            Vector3 terminal = plan.Terminal.sqrMagnitude > 0.5f ? plan.Terminal : Descending(heading, Mathf.Clamp(plan.Angle, 30f, 89f));
+            Vector3 release = aim - heading * range + Vector3.up * alt;
             // Where the bomb starts its fall: under the F-15E's pylon at the jet's speed, or off the
             // C-130's ramp lip, slower by the speed the drogue pulled it out at.
             Vector3 drop = herc ? release + Vector3.up * HercStow.y + heading * HercLipZ : release - Vector3.up * StationFor(k);
@@ -213,9 +229,9 @@ namespace BombsAway
 
             // On the terminal the jet is spawned where its run begins and the call is made once
             // its program is up: the whole timeline starts from there.
-            var term = OpenTerminal(k.Code, danger, mark, release - heading * v0 * (DiveTime + Approach), heading,
-                                    grid, k.Callsign, count, k.Name, k.Gbu, CraftName(k.Craft));
-            if (term != null) now += FireTerminal.Play(term, "spawn", "boot", "wake", "call");
+            var term = OpenTerminal(k.Code, danger, mark, path.Pos[0], heading, grid, k.Callsign, count, k.Name, k.Gbu, CraftName(k.Craft));
+            SetPlanWords(term, plan, path);
+            if (term != null) now += FireTerminal.Play(term, CallSteps(plan));
 
             Path fall;
             float tf;
@@ -229,17 +245,16 @@ namespace BombsAway
             fall.T0 = releaseAt;
             if (cluster != null) { cluster.Shift(releaseAt); impactAt = cluster.FirstLand; }
 
-            // It breaks away from your side once the bomb is off (the C-130 later and gently, its ramp closing).
-            float side = Vector3.Dot(observer - mark, right);
-            Vector3 away = Quaternion.AngleAxis(side > 0f ? -TurnAway : TurnAway, Vector3.up) * heading;
+            // It breaks away from your side once the bomb is off, or flies on over the mark (the C-130
+            // always, gently, its ramp closing): the plan's flight.
+            path.T0 += releaseAt;
             var s = new Strike
             {
                 Number = FireMission.NextNumber(), Type = type, Sign = k.Sign, CraftKind = k.Craft,
                 Mark = mark, Heading = heading, Right = right, Term = term,
                 FireAt = releaseAt, BurstEnd = releaseAt, InAt = releaseAt - ReleaseAfterIn,
-                Path = herc ? BuildRun(release, heading, heading, v0, releaseAt, releaseAt + HercTurnAfter, away, 1.2f, 6f)
-                            : BuildRun(release, heading, heading, v0, releaseAt, releaseAt + 2.5f, away, 3f),
-                B = new Bomb { K = k, Path = fall, ReleaseAt = releaseAt, ImpactAt = impactAt, C = cluster },
+                Path = path,
+                B = new Bomb { K = k, Path = fall, ReleaseAt = releaseAt, ImpactAt = impactAt, C = cluster, Delay = plan.Delay, Aim = aim },
             };
             // No turboprop take yet: the C-130 borrows the A-10's turbofans.
             s.Engine = new PathSound { Key = herc ? "JetA10Loop" : "JetF22Loop", From = s.Path.T0, To = s.Path.End, FadeIn = 3f, FadeOut = 3f };
@@ -251,7 +266,7 @@ namespace BombsAway
             int tof = Mathf.RoundToInt(impactAt - releaseAt);
             term?.Set("TOF", tof).Set("OFF", Compass(Vector3.ProjectOnPlane(s.Path.Fwd[s.Path.Fwd.Count - 1], Vector3.up)));
             if (term == null) RadioLog.Observer($"{k.Callsign}, grid {grid}. {(danger ? "Danger close. " : "")}One {k.Gbu}, heading {hdg:000}. Over.");
-            Say(s, now + 3f, false, $"Grid {grid}, one {k.Gbu}, heading {hdg:000}.", "readback");
+            Say(s, now + 3f, false, $"Grid {grid}, one {k.Gbu}, heading {hdg:000}.{PlanWords(plan, true)}", "readback");
             Say(s, now + 3f, true, "Readback correct.");
             Say(s, releaseAt - 10f, false, "IP inbound.", "inbound");
             Say(s, releaseAt - 10f, true, "Continue.");
@@ -264,6 +279,8 @@ namespace BombsAway
             s.CompleteAt = doneAt + 4f;
 
             _strikes.Add(s);
+            s.PlanDraw = DrawPlan(plan, path, mark, fall);
+            LogPlan(s, plan, now);
             if (Config.Dbg1) MelonLogger.Msg($"[Air] mission {s.Number} ({k.Code}) at {mark} grid {grid}, bearing {deg:F0}, release in {releaseAt - now:F1}s at {release}, falls {tf:F1}s, aim {Vector3.Distance(aim, mark):F1} m off");
             return true;
         }
@@ -374,9 +391,22 @@ namespace BombsAway
             {
                 // What it meets between where it was and where it is now (bodies and roofs move in).
                 Vector3 dir = seg / len;
-                float hob = b.K.BurstHeight;
+                float hob = b.Delay ? 0f : b.K.BurstHeight;
                 float wake = b.K.Diameter + 0.6f;
-                if (FireMission.PathHit(b.LastPos, dir, len + hob, out Vector3 hit, out Vector3 normal))
+                Vector3 from = b.LastPos;
+                float left = len;
+                // On its delay fuze it goes through what it meets well short of its aim (a roof, a
+                // ceiling) and goes off at the first thing near the aim.
+                while (b.Delay && b.Punched < MaxPunches && FireMission.PathHit(from, dir, left, out Vector3 roof, out Vector3 rn)
+                       && Vector3.Dot(b.Aim - roof, dir) > DelayArm)
+                {
+                    Punch(s, roof, rn, dir);
+                    float gone = Vector3.Distance(from, roof) + 0.3f;
+                    from += dir * gone;
+                    left -= gone;
+                    if (left <= 0f) break;
+                }
+                if (left > 0f && FireMission.PathHit(from, dir, left + hob, out Vector3 hit, out Vector3 normal))
                 {
                     float along = Vector3.Distance(b.LastPos, hit);
                     Vector3 at = hob > 0f ? b.LastPos + dir * Mathf.Max(0f, along - hob) : hit + normal * Config.ArtyBurstLift;
@@ -406,6 +436,19 @@ namespace BombsAway
                 if (b.Fall != null) b.Fall.To = Mathf.Min(b.Fall.To, now);
                 DestroyBody(b);
             }
+        }
+
+        private const float DelayArm = 2f;     // m short of its aim (along its fall) a delay-fuzed bomb stops going through things
+        private const int MaxPunches = 4;
+
+        /// <summary>A delay-fuzed bomb going through a roof: dust and a crack where it went in, a hole through the smoke.</summary>
+        private static void Punch(Strike s, Vector3 at, Vector3 normal, Vector3 dir)
+        {
+            var b = s.B;
+            b.Punched++;
+            try { ExplosionFx.Play("Gun30", at + normal * 0.1f, -dir, false, default); } catch { }
+            try { SmokeCloud.Wake(at - dir * 2f, at + dir * 2f, b.K.Diameter + 0.6f, 6f); } catch { }
+            MelonLogger.Msg($"[Air] {b.K.Gbu} through cover at {at} ({b.Punched}), {Vector3.Dot(b.Aim - at, dir):F1} m short of its aim");
         }
 
         /// <param name="axis">The bomb's flight: its case's side spray leaves square to it.</param>

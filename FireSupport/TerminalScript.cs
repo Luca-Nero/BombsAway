@@ -21,7 +21,11 @@ namespace BombsAway
     ///
     /// A step is looked up most specific first (step.UNIT.danger, step.UNIT, step.danger,
     /// step); between equally specific ones the conversation's beats its group's beats [ALL].
-    /// A step that is there but empty says nothing.
+    /// A step that is there but empty says nothing. A step the file has nowhere at all (one
+    /// added in a later version, 5.25.0's plan and masked) comes from the built-in [ALL].
+    ///
+    /// A file that is still an earlier version's default, unedited, is replaced by this one's
+    /// (OldDefaults), so new lines arrive without anyone having to delete it.
     /// </summary>
     internal static class TerminalScript
     {
@@ -51,6 +55,10 @@ namespace BombsAway
 
         private static readonly List<Group> _groups = new List<Group>();
         private static Steps _all = new Steps();
+        private static Steps _builtinAll;          // the DLL's [ALL], for steps the file has nowhere
+
+        /// <summary>Fingerprints (Fingerprint) of earlier defaults: 5.20.0, and 5.22.0-5.24.0.</summary>
+        private static readonly HashSet<ulong> OldDefaults = new HashSet<ulong> { 0xe1794839a24542e3UL, 0xbc0fe25bfd3d98fdUL };
         private static DateTime _stamp;
         private static bool _loaded, _wroteWarned;
 
@@ -88,7 +96,34 @@ namespace BombsAway
                 if (g != null && g.ByName.TryGetValue(name, out l)) return l;
                 if (_all.ByName.TryGetValue(name, out l)) return l;
             }
+            var builtin = BuiltinAll();
+            if (builtin != null)
+                foreach (var name in Candidates(step, unit, danger))
+                    if (builtin.ByName.TryGetValue(name, out var l)) return l;
             return null;
+        }
+
+        /// <summary>The DLL's own [ALL] steps, parsed once.</summary>
+        private static Steps BuiltinAll()
+        {
+            if (_builtinAll != null) return _builtinAll;
+            _builtinAll = new Steps();
+            try
+            {
+                string def = Default();
+                if (def != null) ParseInto(def, "(built in)", new List<Group>(), _builtinAll, false);
+            }
+            catch (Exception e) { MelonLogger.Warning($"[Terminal] couldn't read the built-in script: {e.Message}"); }
+            return _builtinAll;
+        }
+
+        /// <summary>FNV-1a over the text with its line ends as LF and no trailing blanks.</summary>
+        private static ulong Fingerprint(string text)
+        {
+            string t = text.Replace("\r\n", "\n").TrimEnd();
+            ulong h = 0xcbf29ce484222325UL;
+            foreach (char c in t) { h ^= c; h *= 0x100000001b3UL; }
+            return h;
         }
 
         private static IEnumerable<string> Candidates(string step, string unit, bool danger)
@@ -142,8 +177,21 @@ namespace BombsAway
                 }
                 var stamp = File.GetLastWriteTimeUtc(path);
                 if (_loaded && stamp == _stamp) return;
+                string text = File.ReadAllText(path);
+                if (OldDefaults.Contains(Fingerprint(text)))
+                {
+                    // An earlier version's default, never edited: this version's takes its place.
+                    string def = Default();
+                    if (def != null)
+                    {
+                        FruitLib.FruitPaths.WriteAllTextAtomic(path, def);
+                        MelonLogger.Msg($"[Terminal] {FileName} was an earlier default, unedited: updated to this version's");
+                        text = def;
+                        stamp = File.GetLastWriteTimeUtc(path);
+                    }
+                }
                 _stamp = stamp;
-                Parse(File.ReadAllText(path), path);
+                Parse(text, path);
             }
             catch (Exception e)
             {
@@ -167,6 +215,12 @@ namespace BombsAway
             _groups.Clear();
             _all = new Steps();
             _loaded = true;
+            ParseInto(text, from, _groups, _all, true, reload);
+        }
+
+        /// <summary>Reads a script into <paramref name="groups"/> and <paramref name="all"/>; <paramref name="report"/>: log what was read and any problems.</summary>
+        private static void ParseInto(string text, string from, List<Group> groups, Steps all, bool report, bool reload = false)
+        {
 
             Group g = null;
             Steps scope = null;          // where the next @step goes: the group, a conversation, or [ALL]
@@ -177,7 +231,7 @@ namespace BombsAway
 
             void Warn(int n, string msg)
             {
-                if (++warnings <= 12) MelonLogger.Warning($"[Terminal] {FileName} line {n}: {msg}");
+                if (++warnings <= 12 && report) MelonLogger.Warning($"[Terminal] {FileName} line {n}: {msg}");
             }
 
             for (int n = 1; n <= rows.Length; n++)
@@ -189,9 +243,9 @@ namespace BombsAway
                 {
                     string name = t.Substring(1, t.Length - 2).Trim();
                     step = null;
-                    if (name.Equals("ALL", StringComparison.OrdinalIgnoreCase)) { g = null; scope = _all; continue; }
+                    if (name.Equals("ALL", StringComparison.OrdinalIgnoreCase)) { g = null; scope = all; continue; }
                     g = new Group { Name = name, Program = name + ".AI", Prefix = name };
-                    _groups.Add(g);
+                    groups.Add(g);
                     scope = g;
                     continue;
                 }
@@ -246,12 +300,13 @@ namespace BombsAway
                 }
             }
 
+            if (!report) return;
             if (noGlyph.Count > 0)
                 MelonLogger.Warning($"[Terminal] {FileName}: no glyph for {string.Join(" ", noGlyph)} (drawn as a space)");
             if (warnings > 12) MelonLogger.Warning($"[Terminal] {FileName}: {warnings - 12} more problems");
-            foreach (var gr in _groups)
+            foreach (var gr in groups)
                 if (gr.Units.Count == 0) MelonLogger.Warning($"[Terminal] [{gr.Name}] runs no units (units = ...)");
-            MelonLogger.Msg($"[Terminal] script {(reload ? "reloaded" : "loaded")}: {_groups.Count} programs, {convos} conversations ({from})");
+            MelonLogger.Msg($"[Terminal] script {(reload ? "reloaded" : "loaded")}: {groups.Count} programs, {convos} conversations ({from})");
         }
 
         private static void SetKey(Group g, string key, string value, int n, Action<int, string> warn)

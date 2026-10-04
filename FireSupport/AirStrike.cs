@@ -152,27 +152,64 @@ namespace BombsAway
         }
 
         /// <summary>
+        /// How a run comes in and goes out, past the dive itself (5.25.0, AirStrike.Approach.cs).
+        /// Null: straight in along the run-in heading, and a break away before the mark.
+        /// </summary>
+        private sealed class RunShape
+        {
+            public float EntryTurn;            // degrees it turns onto its run-in, signed (+ = clockwise from above); 0 = straight in
+            public float EntryG = 3f;          // the entry turn's load factor
+            public bool Overfly;               // after the attack: recover, fly on over the mark, turn off past it
+            public Vector3 Mark;
+            public float OverflyPast = 700f;   // metres past the mark (along the run) before it turns off
+            public float OverflyClimb = 8f;    // degrees it climbs out at while it overflies
+            public float OverflyG = 2.5f;      // the turn-off's load factor
+        }
+
+        private const float FinalStraight = 3f;   // seconds level on the run-in heading between the entry turn and the dive
+
+        /// <summary>Seconds the run flies before <paramref name="fireAt"/>: the dive, the run-in, the entry turn and a leg before it.</summary>
+        private static float BackTime(float speed, RunShape shape)
+        {
+            if (shape == null || Mathf.Abs(shape.EntryTurn) < 1f) return DiveTime + Approach;
+            return DiveTime + Mathf.Max(Approach, PitchOver + FinalStraight + TurnSeconds(shape.EntryTurn, shape.EntryG, speed) + 3f);
+        }
+
+        /// <summary>A level turn through <paramref name="deg"/> at load factor <paramref name="g"/>: ω = g √(n² − 1) / v.</summary>
+        private static float TurnRate(float g, float speed) => 9.81f * Mathf.Sqrt(Mathf.Max(0.2f, g * g - 1f)) / Mathf.Max(20f, speed);
+        private static float TurnSeconds(float deg, float g, float speed) => Mathf.Abs(deg) * Mathf.Deg2Rad / TurnRate(g, speed);
+
+        /// <summary>
         /// A run that is at <paramref name="m0"/> heading down <paramref name="dive"/> at
         /// <paramref name="fireAt"/>: worked back from there (the dive, pitched over smoothly
-        /// from level flight along <paramref name="level"/>), and forward (the dive until
-        /// <paramref name="pullAt"/>, then a pull up into a climbing turn toward <paramref name="away"/>).
+        /// from level flight along <paramref name="level"/>, and before that the entry turn onto
+        /// it, <paramref name="shape"/>), and forward (the dive until <paramref name="pullAt"/>,
+        /// then a pull up into a climbing turn toward <paramref name="away"/>; or, overflying, a
+        /// pull up to a shallow climb on over the mark and the turn toward <paramref name="away"/>
+        /// once it's past).
         /// </summary>
         private static Path BuildRun(Vector3 m0, Vector3 dive, Vector3 level, float speed, float fireAt, float pullAt, Vector3 away, float pullG,
-                                     float climbDeg = ClimbAngle)
+                                     float climbDeg = ClimbAngle, RunShape shape = null)
         {
             var path = new Path { Speed = speed };
             float divesAt = fireAt - DiveTime;
+            float entry = shape != null ? shape.EntryTurn : 0f;
+            float turnEnd = divesAt - PitchOver * 0.5f - FinalStraight;          // the entry turn ends here, on the run-in heading
+            float omega = shape != null ? TurnRate(shape.EntryG, speed) * Mathf.Rad2Deg : 0f;   // deg/s
 
             // Backward from the firing point.
             var back = new List<Vector3>();
             var backDir = new List<Vector3>();
             Vector3 p = m0;
-            int nBack = Mathf.CeilToInt((DiveTime + Approach) / SampleDt);
+            int nBack = Mathf.CeilToInt(BackTime(speed, shape) / SampleDt);
             for (int i = 0; i <= nBack; i++)
             {
                 float t = fireAt - i * SampleDt;
                 float u = Mathf.Clamp01((divesAt + PitchOver * 0.5f - t) / PitchOver);
-                Vector3 d = Vector3.Slerp(dive, level, u * u * (3f - 2f * u)).normalized;
+                Vector3 lv = level;
+                if (Mathf.Abs(entry) >= 1f && t < turnEnd)
+                    lv = Quaternion.AngleAxis(-Mathf.Sign(entry) * Mathf.Min(Mathf.Abs(entry), omega * (turnEnd - t)), Vector3.up) * level;   // before the turn it flew this way
+                Vector3 d = Vector3.Slerp(dive, lv, u * u * (3f - 2f * u)).normalized;
                 back.Add(p); backDir.Add(d);
                 p -= d * speed * SampleDt;
             }
@@ -184,13 +221,35 @@ namespace BombsAway
             float rate = pullG * 9.81f / Mathf.Max(30f, speed);   // rad/s
             p = m0;
             Vector3 dir = dive;
-            int nFwd = Mathf.CeilToInt((pullAt - fireAt + AfterTime) / SampleDt);
-            for (int i = 0; i <= nFwd; i++)
+            if (shape != null && shape.Overfly)
             {
-                float t = fireAt + i * SampleDt;
-                path.Pos.Add(p); path.Fwd.Add(dir);
-                if (t >= pullAt) dir = Vector3.RotateTowards(dir, climb, rate * SampleDt, 0f).normalized;
-                p += dir * speed * SampleDt;
+                // Recover to a shallow climb along the run, over the mark, then turn off once past it.
+                Vector3 run = Vector3.ProjectOnPlane(level, Vector3.up).normalized;
+                float oc = shape.OverflyClimb * Mathf.Deg2Rad;
+                Vector3 recover = (run * Mathf.Cos(oc) + Vector3.up * Mathf.Sin(oc)).normalized;
+                float turnRate = shape.OverflyG * 9.81f / Mathf.Max(30f, speed);
+                float turningFor = 0f;
+                for (int i = 0; i <= Mathf.CeilToInt(90f / SampleDt); i++)
+                {
+                    float t = fireAt + i * SampleDt;
+                    path.Pos.Add(p); path.Fwd.Add(dir);
+                    bool past = Vector3.Dot(p - shape.Mark, run) > shape.OverflyPast;
+                    if (past) { dir = Vector3.RotateTowards(dir, climb, turnRate * SampleDt, 0f).normalized; turningFor += SampleDt; }
+                    else if (t >= pullAt) dir = Vector3.RotateTowards(dir, recover, rate * SampleDt, 0f).normalized;
+                    if (turningFor > AfterTime * 0.75f) break;
+                    p += dir * speed * SampleDt;
+                }
+            }
+            else
+            {
+                int nFwd = Mathf.CeilToInt((pullAt - fireAt + AfterTime) / SampleDt);
+                for (int i = 0; i <= nFwd; i++)
+                {
+                    float t = fireAt + i * SampleDt;
+                    path.Pos.Add(p); path.Fwd.Add(dir);
+                    if (t >= pullAt) dir = Vector3.RotateTowards(dir, climb, rate * SampleDt, 0f).normalized;
+                    p += dir * speed * SampleDt;
+                }
             }
 
             // Banked into its turns: lift along what it accelerates by, plus what holds it up.
@@ -308,6 +367,7 @@ namespace BombsAway
             public readonly List<Line> Radio = new List<Line>();
             public int RadioNext;
             public TermSession Term;              // on the terminal (AirTerminal) instead of the radio net
+            public GameObject PlanDraw;           // DebugDrawAirPlan's lines
             public bool Complete;
         }
 
@@ -374,19 +434,25 @@ namespace BombsAway
             }
 
             float now = Time.time;
-            float dive = g.Dive * Mathf.Deg2Rad;
-
-            Vector3 heading = AttackHeading(mark, observer);
-            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
-            Vector3 down = (heading * Mathf.Cos(dive) + Vector3.down * Mathf.Sin(dive)).normalized;
-            int hdg = Mathf.RoundToInt(Mathf.Repeat(Mathf.Atan2(heading.x, heading.z) * Mathf.Rad2Deg, 360f)) % 360;
             bool danger = Vector3.Distance(mark, observer) < Config.AirDangerClose;
+
+            // The approach (AirStrike.Approach.cs): the attack axis and dive that reach the mark,
+            // the way in and out; its flight is worked out firing at t = 0, then moved to the clock.
+            var plan = PlanGun(g, mark, observer, danger, p =>
+            {
+                Vector3 dn = Descending(p.Heading, p.Angle);
+                Vector3 a0 = mark - p.Heading * g.Walk * 0.5f;
+                return BuildRun(a0 - dn * g.Range, dn, p.Heading, g.Speed, 0f, g.Burst + 0.4f, p.Away, g.PullG, ClimbAngle, p.Shape);
+            }, out Path path);
+            Vector3 heading = plan.Heading;
+            Vector3 right = Vector3.Cross(Vector3.up, heading).normalized;
+            int hdg = Mathf.RoundToInt(plan.Az) % 360;
 
             // On the terminal the jet is spawned where its run begins and the call is made once
             // its program is up: the whole timeline starts from there.
-            var term = OpenTerminal(g.Code, danger, mark, mark - heading * (g.Range * Mathf.Cos(dive) + g.Speed * (DiveTime + Approach)), heading,
-                                    grid, g.Callsign, rounds, $"{g.CaliberMm:0}MM", g.Name, CraftName(g.Craft));
-            if (term != null) now += FireTerminal.Play(term, "spawn", "boot", "wake", "call");
+            var term = OpenTerminal(g.Code, danger, mark, path.Pos[0], heading, grid, g.Callsign, rounds, $"{g.CaliberMm:0}MM", g.Name, CraftName(g.Craft));
+            SetPlanWords(term, plan, path);
+            if (term != null) now += FireTerminal.Play(term, CallSteps(plan));
 
             var s = new Strike
             {
@@ -398,12 +464,9 @@ namespace BombsAway
             s.BurstEnd = s.FireAt + g.Burst;
             s.Total = Mathf.Max(1, Mathf.RoundToInt(g.Burst * s.Rate));
             s.InAt = s.FireAt - 5f;
-
-            // It turns off away from your side of its run.
-            float side = Vector3.Dot(observer - mark, right);
-            Vector3 away = Quaternion.AngleAxis(side > 0f ? -TurnAway : TurnAway, Vector3.up) * heading;
-            Vector3 m0 = s.Aim0 - down * g.Range;
-            s.Path = BuildRun(m0, down, heading, g.Speed, s.FireAt, s.BurstEnd + 0.4f, away, g.PullG);
+            path.T0 += s.FireAt;
+            s.Path = path;
+            s.PlanDraw = DrawPlan(plan, path, mark);
 
             s.Engine = new PathSound { Key = g.EngineKey, From = s.Path.T0, To = s.Path.End, FadeIn = 3f, FadeOut = 3f };
             s.Gun = new PathSound { Key = g.GunKey, Tail = g.TailKey, From = s.FireAt, To = s.BurstEnd, FadeIn = 0.04f, FadeOut = 0.03f, Ahead = g.Muzzle.z };
@@ -412,7 +475,7 @@ namespace BombsAway
             string offWord = Compass(Vector3.ProjectOnPlane(s.Path.Fwd[s.Path.Fwd.Count - 1], Vector3.up));
             term?.Set("OFF", offWord);
             if (term == null) RadioLog.Observer($"{g.Callsign}, grid {grid}. {(danger ? "Danger close. " : "")}Guns, heading {hdg:000}. Over.");
-            Say(s, now + 3f, false, $"Grid {grid}, heading {hdg:000}.", "readback");
+            Say(s, now + 3f, false, $"Grid {grid}, heading {hdg:000}.{PlanWords(plan, false)}", "readback");
             Say(s, now + 3f, true, "Readback correct.");
             Say(s, s.FireAt - 11f, false, "IP inbound.", "inbound");
             Say(s, s.FireAt - 11f, true, "Continue.");
@@ -424,7 +487,7 @@ namespace BombsAway
             s.CompleteAt = s.BurstEnd + 5f;
 
             _strikes.Add(s);
-            if (Config.Dbg1) MelonLogger.Msg($"[Air] mission {s.Number} ({g.Code}) at {mark} grid {grid}, heading {hdg}, fires in {s.FireAt - now:F1}s, {s.Total} rounds from {m0}");
+            LogPlan(s, plan, now);
             return true;
         }
 
@@ -884,6 +947,8 @@ namespace BombsAway
         {
             if (s.Craft != null) Object.Destroy(s.Craft);
             s.Craft = null;
+            if (s.PlanDraw != null) Object.Destroy(s.PlanDraw);
+            s.PlanDraw = null;
             DropSound(s.Engine);
             DropSound(s.Gun);
             if (s.B != null) DropBomb(s.B);
@@ -902,6 +967,6 @@ namespace BombsAway
             ClearCluster();
         }
 
-        public static void OnScene() { Clear(); _bombBearing = -1f; _dartFx = null; _dartDustPs = null; }
+        public static void OnScene() { Clear(); _bombBearing = -1f; _lastAirAz = -1f; _dartFx = null; _dartDustPs = null; }
     }
 }

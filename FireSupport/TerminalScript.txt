@@ -55,6 +55,11 @@
 #                          mission's clock starts once the call is typed out)
 #  Artillery then:         readback, shot, splash, kill, last, free
 #                          (the program is killed at SPLASH, rounds in the air)
+#  Air strikes, right after the call:
+#                          plan       how it will come in: the attack axis
+#                                     picked for the mark, the way in and out
+#                          masked     only when the mark is under cover
+#                                     (nothing reaches it cleanly)
 #  Air strikes then:       readback   about 3 s after the call
 #                          inbound    about 11 s before the attack
 #                          in         5 s before it (4 s before a release)
@@ -85,6 +90,13 @@
 #  {WEAPON}   155MM HE, 30MM GUN RUN, M151, GBU-31 ...
 #  {CRAFT}    M777A2, A-10C, F-22A, AH-64E, F-15E, MC-130J
 #  {PROGRAM}  {PREFIX}  {UNIT} (the strip code)  {PID} (a random process id)
+#  Air strikes' plan (AirDynamicApproach):
+#  {DIVE}     dive, or a bomb's impact angle, degrees
+#  {LOS}      % of the lines tried along the axis that reach the mark
+#  {AXES}     attack axes tried            {COVER}   surfaces on the axis
+#  {ENTRY}    where it comes in from: "SOUTHWEST"
+#  {EGRESS}   "BREAK NORTH" or "OVERFLY, OFF NORTH"
+#  {FUZE}     a bomb's fuze: INSTANT, or DELAY under cover
 #
 # =============================================================================
 
@@ -113,6 +125,15 @@ obs: {SIGN}, GRID {GRID}. {DANGER}{WEAPON}. OVER.
 @unable
 obs: {SIGN}, GRID {GRID}. OVER.
 ai: UNABLE. ENGAGED. OUT.
+
+@plan
+sys: SOLVE ATTACK AXIS ...... {AXES} TRIED, LOS {LOS}%
+sys: AXIS {HDG} FROM {FROM} AT {DIVE} DEG, ENTRY {ENTRY}
+sys: EGRESS {EGRESS}
+
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+ai: TARGET IS UNDER COVER. GOING THROUGH IT.
 
 @readback
 ai: GRID {GRID}. {WEAPON}. OUT.
@@ -283,6 +304,10 @@ obs: {SIGN}, GRID {GRID}. {DANGER}GUNS, HEADING {HDG}. OVER.
 obs: {SIGN}, GRID {GRID}. OVER.
 ai: NO NO NO, WAIT YOUR TURN! I'M STILL ON THE LAST ONE! OUT.
 
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+ai: IT'S UNDER A ROOF?! THAT'S OKAY! THE GUN DOESN'T BELIEVE IN ROOFS!
+
 == GUN DAY
 @wake
 status: LINKED
@@ -401,6 +426,10 @@ obs: {SIGN}, GRID {GRID}. {DANGER}GUNS, HEADING {HDG}. OVER.
 obs: {SIGN}, GRID {GRID}. OVER.
 ai: NEGATIVE, ENGAGED. CALL BACK WHEN THE AIR IS CLEAR. OUT.
 
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+ai: TARGET MASKED. ATTACKING THROUGH COVER. EXPECT REDUCED EFFECT.
+
 == BY THE BOOK
 @wake
 status: LINKED
@@ -515,6 +544,10 @@ obs: {SIGN}, GRID {GRID}. {DANGER}ROCKETS, {N} {AMMO}, HEADING {HDG}. OVER.
 @unable
 obs: {SIGN}, GRID {GRID}. ROCKETS. OVER.
 ai: UNABLE, ENGAGED. BOTH SEATS ARE BUSY. OUT.
+
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+ai: FRONT SEAT: TARGET'S MASKED. BACK SEAT: COPY. THROUGH THE ROOF, THEN.
 
 == TWO SEATS
 @wake
@@ -638,6 +671,11 @@ obs: {SIGN}, GRID {GRID}. {DANGER}ONE {WEAPON}, HEADING {HDG}. OVER.
 obs: {SIGN}, GRID {GRID}. ONE {WEAPON}. OVER.
 ai: UNABLE. ONE SOLUTION AT A TIME. RESUBMIT. OUT.
 
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+sys: FMU-152 ............... {FUZE}
+ai: THE TARGET IS UNDER A ROOF. THE ROOF IS NOW PART OF THE SOLUTION.
+
 == SOLUTION
 @wake
 status: LINKED
@@ -759,6 +797,10 @@ obs: {SIGN}, GRID {GRID}. {DANGER}ONE {WEAPON}, HEADING {HDG}. OVER.
 @unable
 obs: {SIGN}, GRID {GRID}. OVER.
 ai: HUSH. NOT NOW. MOTHER IS BUSY. OUT.
+
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+ai: HIDING UNDER A ROOF, DEAR? FROM MOTHER? NOTHING HIDES FROM MOTHER.
 
 @kill
 cmd: KILL MOTHER.AI /F
@@ -896,6 +938,10 @@ obs: {SIGN}, GRID {GRID}. {DANGER}ONE {WEAPON}, HEADING {HDG}. OVER.
 @unable
 obs: {SIGN}, GRID {GRID}. OVER.
 ai: NO!! IT'S OUR TURN!! WE'RE ALL STILL OUT HERE!! OUT.
+
+@masked
+sys: WARN: NO CLEAR LINE TO GRID {GRID} ({COVER} SURFACES)
+ai: THEY'RE HIDING!! UNDER A ROOF!! WE'LL KNOCK!! ALL OF US!!
 
 @kill
 cmd: KILL BROOD.AI /F /ALL
