@@ -9,8 +9,8 @@ namespace BombsAway
     /// <summary>
     /// Ordnance models from the mod's asset bundle (Bundles/bombsaway.bundle, embedded). Each
     /// prefab is a root with a convex MeshCollider and a Rigidbody, and one child per moving
-    /// part (grenade: Body, Spoon, Pin) so later animations can drive them. Anything the
-    /// bundle lacks, or a bundle that fails to load, falls back to the old *_mesh.json path.
+    /// part (grenade: Body, Spoon, Pin) so later animations can drive them. A bundle that fails
+    /// to load leaves grey primitives in the world and nothing in the hand.
     /// </summary>
     internal static class OrdnanceModels
     {
@@ -44,7 +44,7 @@ namespace BombsAway
 
         internal static bool Has(Ordnance o) => Prefab(o) != null;
 
-        /// <summary>The bundled prefab, or null to use the JSON mesh.</summary>
+        /// <summary>The bundled prefab, or null if the bundle has none.</summary>
         internal static GameObject Prefab(Ordnance o) => Load(PrefabName(o));
 
         /// <summary>Any prefab in the bundle by name (an explosion effect), or null.</summary>
@@ -58,7 +58,7 @@ namespace BombsAway
             if (_loadTried) return;
             _loadTried = true;
             try { _bundle = FruitBundle.FromResource(Assembly.GetExecutingAssembly(), BundleResource); }
-            catch (System.Exception e) { MelonLogger.Warning($"[Models] {BundleResource} failed to load, using JSON meshes: {e.Message}"); }
+            catch (System.Exception e) { MelonLogger.Warning($"[Models] {BundleResource} failed to load, using plain primitives: {e.Message}"); }
         }
 
         private static GameObject Load(string name)

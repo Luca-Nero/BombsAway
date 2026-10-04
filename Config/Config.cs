@@ -687,10 +687,6 @@ namespace BombsAway
         public static float MineStickNudgeX = 0f;
         public static float MineStickNudgeY = 0f;
         public static float MineStickNudgeZ = 0f;
-        public static float MineSightOriginX = 0f;
-        public static float MineSightOriginY = 0.85f;
-        public static float MineSightOriginZ = 0f;
-        public static float MineSightSpacing = 0.185f;
 
         // ── Effects ───────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("Effects")] public static bool CamFXEnabled = true;
@@ -736,9 +732,12 @@ namespace BombsAway
         [FruitLib.MenuCategory("Debug")] public static bool DebugDrawFlashArms = false;
         // An air strike's plan, drawn until it's over: the reach lines tried from the mark (green
         // reach it, red don't), the chosen axis (yellow) and the aircraft's whole flight (cyan).
+        // DebugLevel 1 also logs each strike's plan ([Air] MSN nn ... plan:).
         [FruitLib.MenuCategory("Debug")] public static bool DebugDrawAirPlan = false;
         public static int FragLayerMask  = ~0;
         public static int WorldLayerMask = ~0;
+        // The debug keys below do nothing unless this is on.
+        [FruitLib.MenuCategory("Debug")] public static bool DebugHotkeys = false;
         // Test bench: a row of walls to shoot at (Debug/TestBench.cs). Shift+key clears it.
         [FruitLib.MenuCategory("Debug")] public static KeyCode TestBenchKey = KeyCode.Keypad1;
         // Logs the game's item, ragdoll and camera sizes (Debug/ScaleProbe.cs); hold a native gun for its hip pose.

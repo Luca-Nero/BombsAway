@@ -1,4 +1,3 @@
-using FruitLib;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -57,11 +56,11 @@ namespace BombsAway
 
             var owned = new System.Collections.Generic.List<Material>();
             // The bundled model: its own material copies, and for the Javelin a rig for fins and nozzle glow.
+            // Without one (the bundle failed to load), a plain capsule.
             GameObject obj = OrdnanceModels.Spawn(kind, spawnAt,
                 out _, out Material[] bundleMats);
             MissileRig rig = null;
             RocketRig rocketRig = null;
-            var mesh = obj == null ? Core.Meshes.GetMesh(ep.MeshName) : null;
             if (obj != null)
             {
                 obj.name = rocket ? "Rocket" : "HomingMissile";
@@ -69,20 +68,6 @@ namespace BombsAway
                 if (rocket) rocketRig = RocketRig.Bind(obj.transform);
                 else        rig = MissileRig.Bind(obj.transform);
                 OrdnanceModels.PaintWarhead(kind, obj, MissileWarheadMode);   // its stencil says what it carries
-            }
-            else if (mesh != null)
-            {
-                obj = new GameObject("HomingMissile");
-                obj.transform.position = spawnAt;
-                obj.transform.localScale = Vector3.one * 0.1f;
-
-                var mf = obj.AddComponent<MeshFilter>();
-                mf.mesh = mesh;
-
-                var mr = obj.AddComponent<MeshRenderer>();
-                owned.AddRange(FruitMeshUtil.ApplyNewMaterials(mr, Core.Meshes.GetMaterials(ep.MeshName),
-                    Config.FindShader(), new Color(0.3f, 0.3f, 0.32f, 1f)));
-                mr.shadowCastingMode = ShadowCastingMode.Off;
             }
             else
             {

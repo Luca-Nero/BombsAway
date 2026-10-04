@@ -448,7 +448,7 @@ namespace BombsAway
             b.Punched++;
             try { ExplosionFx.Play("Gun30", at + normal * 0.1f, -dir, false, default); } catch { }
             try { SmokeCloud.Wake(at - dir * 2f, at + dir * 2f, b.K.Diameter + 0.6f, 6f); } catch { }
-            MelonLogger.Msg($"[Air] {b.K.Gbu} through cover at {at} ({b.Punched}), {Vector3.Dot(b.Aim - at, dir):F1} m short of its aim");
+            if (Config.Dbg1) MelonLogger.Msg($"[Air] {b.K.Gbu} through cover at {at} ({b.Punched}), {Vector3.Dot(b.Aim - at, dir):F1} m short of its aim");
         }
 
         /// <param name="axis">The bomb's flight: its case's side spray leaves square to it.</param>

@@ -20,7 +20,8 @@ namespace BombsAway
     ///
     /// The window is a quad parented to the world camera, placed each frame by the caller's
     /// anchor (a camera-space offset from it, so it follows the hand's sway) and turned toward the
-    /// eye, on the viewmodel camera's layer when there is one so it never sinks into a wall. Its
+    /// eye, on the caller's layer: the viewmodel camera's (it never sinks into a wall), or the
+    /// layer of a model it is kept behind (Tick's behind: one depth, so the model covers it). Its
     /// 176x112 texture is drawn per pixel with PixelFont's glyphs, as LrfDisplay's HUD is, in the
     /// set's hazard yellow, and redrawn only when what it shows changes. The material is a copy of
     /// the binoculars' HUD material (URP Unlit, transparent, double-sided), already in the bundle.
@@ -61,6 +62,12 @@ namespace BombsAway
         private readonly Color32[] _px = new Color32[W * H];
         private string _drawnKey;
         private bool _warned;
+
+        // Behind a model (Tick's behind): its parts, and how far the window is pushed back (1: not).
+        private const float BehindGap = 0.03f;                 // metres between the model's back and the window
+        private Transform _behindRoot;
+        private MeshFilter[] _behindParts;
+        private float _push = 1f;
 
         private readonly float[] _cellClaim = new float[FieldCols * FieldRows];
         private readonly byte[] _cells = new byte[FieldCols * FieldRows];          // 0 old, 1 new, 2 static
@@ -121,8 +128,14 @@ namespace BombsAway
             if (!_show) _active = false;
         }
 
-        /// <summary>Every LateUpdate: the fight's rounds, and the window beside <paramref name="anchor"/> (null: where it was).</summary>
-        public void Tick(Camera cam, Vector3? anchor, Vector3 offset, float yaw, int layer)
+        /// <summary>
+        /// Every LateUpdate: the fight's rounds, and the window beside <paramref name="anchor"/>
+        /// (null: where it was). With <paramref name="behind"/>, the window is pushed back along
+        /// its line of sight until all of that model is in front of it, and grown to look the
+        /// same: the model always covers it, never clips through it. Then <paramref name="layer"/>
+        /// should be the model's, so both are in one camera's depth.
+        /// </summary>
+        public void Tick(Camera cam, Vector3? anchor, Vector3 offset, float yaw, int layer, Transform behind = null)
         {
             if (!_active) return;
             float now = Time.time;
@@ -164,7 +177,7 @@ namespace BombsAway
             }
             if (!_doneSounded && now >= done && _closeAt < 0f) { _doneSounded = true; Sfx.PlayHeld("LrfFix", 0.35f); }
 
-            Place(cam, anchor, offset, yaw, layer, now);
+            Place(cam, anchor, offset, yaw, layer, behind, now);
             string key = Key(now, typed);
             if (key != _drawnKey) { Draw(now, typed); _drawnKey = key; }
         }
@@ -180,6 +193,8 @@ namespace BombsAway
             foreach (Object o in new Object[] { _go, _mat, _tex, _mesh }) if (o != null) Object.Destroy(o);
             _go = null; _mat = null; _tex = null; _mesh = null;
             _drawnKey = null;
+            _behindRoot = null; _behindParts = null;
+            _push = 1f;
         }
 
         private float Fraction(float now)
@@ -256,7 +271,7 @@ namespace BombsAway
         private int Typed(float now) => Mathf.Clamp(Mathf.FloorToInt((now - _typeAt) * TypeRate), 0, Command.Length);
 
         /// <summary>Beside the anchor, turned to the eye; it opens out of a line and folds back into one.</summary>
-        private void Place(Camera cam, Vector3? anchor, Vector3 offset, float yaw, int layer, float now)
+        private void Place(Camera cam, Vector3? anchor, Vector3 offset, float yaw, int layer, Transform behind, float now)
         {
             if (cam != null && _go.transform.parent != cam.transform) _go.transform.SetParent(cam.transform, false);
             if (_go.layer != layer) _go.layer = layer;
@@ -264,8 +279,22 @@ namespace BombsAway
             if (anchor.HasValue && cam != null)
             {
                 Vector3 local = cam.transform.InverseTransformPoint(anchor.Value) + offset;
-                _go.transform.localPosition = local;
-                _go.transform.localRotation = Quaternion.LookRotation(local, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
+                var rot = Quaternion.LookRotation(local, Vector3.up) * Quaternion.Euler(0f, yaw, 0f);
+                _push = 1f;
+                if (behind != null)
+                {
+                    // The window's plane faces the eye along n. A point of the model on the same
+                    // line of sight as a point of the window is nearer exactly when its reach
+                    // along n is less than the plane's, so the plane goes past the model's
+                    // farthest reach; moved along its own line of sight and scaled with the
+                    // distance, it keeps its place and size on screen.
+                    Vector3 n = rot * Vector3.forward;
+                    float plane = Vector3.Dot(local, n);
+                    float need = Reach(cam.transform, behind, n) + BehindGap;
+                    if (plane > 1e-4f && need > plane) _push = need / plane;
+                }
+                _go.transform.localPosition = local * _push;
+                _go.transform.localRotation = rot;
             }
 
             float open = Mathf.Clamp01((now - _openedAt) / OpenTime);
@@ -273,8 +302,38 @@ namespace BombsAway
             float h = 1f - (1f - open) * (1f - open);                     // ease out
             h = Mathf.Lerp(h, 0.03f, shut);                               // into a line...
             float w = shut > 0.6f ? Mathf.Lerp(1f, 0.02f, (shut - 0.6f) / 0.4f) : 1f;   // ...then a dot
-            _go.transform.localScale = new Vector3(w, Mathf.Max(0.03f, h), 1f);
+            _go.transform.localScale = new Vector3(w, Mathf.Max(0.03f, h), 1f) * _push;
             if (!_go.activeSelf) _go.SetActive(true);
+        }
+
+        /// <summary>
+        /// How far <paramref name="model"/> reaches along <paramref name="n"/> (camera space): the
+        /// farthest corner of its parts' mesh bounds. Meshes rather than renderers, so the parts a
+        /// spawn keeps hidden until the end count too. -inf with no parts.
+        /// </summary>
+        private float Reach(Transform cam, Transform model, Vector3 n)
+        {
+            if (model != _behindRoot || _behindParts == null)
+            {
+                _behindRoot = model;
+                _behindParts = model.GetComponentsInChildren<MeshFilter>(true);
+            }
+            float reach = float.NegativeInfinity;
+            for (int i = 0; i < _behindParts.Length; i++)
+            {
+                var mf = _behindParts[i];
+                if (mf == null || !mf.gameObject.activeInHierarchy) continue;
+                var mesh = mf.sharedMesh;
+                if (mesh == null) continue;
+                Bounds b = mesh.bounds;
+                var part = mf.transform;
+                for (int c = 0; c < 8; c++)
+                {
+                    var corner = b.center + Vector3.Scale(b.extents, new Vector3((c & 1) == 0 ? -1 : 1, (c & 2) == 0 ? -1 : 1, (c & 4) == 0 ? -1 : 1));
+                    reach = Mathf.Max(reach, Vector3.Dot(cam.InverseTransformPoint(part.TransformPoint(corner)), n));
+                }
+            }
+            return reach;
         }
 
         /// <summary>Everything the texture shows; it is redrawn when this changes.</summary>

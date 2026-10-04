@@ -415,9 +415,10 @@ namespace BombsAway
             return s;
         }
 
-        /// <summary>One line per strike (always on): the approach it flies, for the test.</summary>
+        /// <summary>One line per strike (DebugLevel 1): the approach it flies.</summary>
         private static void LogPlan(Strike s, Plan plan, float now)
         {
+            if (!Config.Dbg1) return;
             var path = s.Path;
             string how = plan.Shape == null ? "fixed" : $"{(plan.Shape.Overfly ? "overfly" : "break")}, entry {plan.Shape.EntryTurn:+0;-0;0} deg";
             string from = Compass(-Vector3.ProjectOnPlane(path.Fwd[0], Vector3.up));

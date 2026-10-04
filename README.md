@@ -29,7 +29,7 @@ Fully physics-simulated ordnance for FRUKT, each its own item on the inventory's
 ## Requirements & Compatibility
 
 - **Prerequisites:** MelonLoader 0.7.2+ Installation. [Check out their Tutorial!](https://melonwiki.xyz/#/)
-- **Prerequisites:** [FruitLib](https://github.com/Luca-Nero/FruitLib) 5.2.0+ in your `Mods/` folder - BombsAway uses it for the config menu, HUD, performance monitor, and mesh loading.
+- **Prerequisites:** [FruitLib](https://github.com/Luca-Nero/FruitLib) 5.10.0+ in your `Mods/` folder - BombsAway uses it for the config menu, HUD, performance monitor, asset bundle and ballistics.
 - **Compatibility:** No known Incompatabilities.
 
 ## Installation

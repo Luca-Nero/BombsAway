@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.25.0";
+        public const string Version = "5.26.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -30,8 +30,6 @@ namespace BombsAway
         public static AttackMode MissileAttackMode = AttackMode.Top;
         public static WarheadMode MissileWarheadMode = WarheadMode.HEAT;
         public static bool PersistentLock = false;
-
-        internal static FruitMeshLibrary Meshes;
 
         // ── FruitLib dependency ──────────────────────────────────────────────
         // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
@@ -59,7 +57,6 @@ namespace BombsAway
             FruitMenu.CaptureDefaults(typeof(Config));
             ConfigLoader.Load();
             TerminalScript.Refresh();   // writes UserData/BombsAwayTerminal.txt if it's missing, so it can be edited before the first call
-            Meshes =new FruitMeshLibrary(System.Reflection.Assembly.GetExecutingAssembly());
             ExplosionSystem.Init();
             FruitMenu.Register("BombsAway", ConfigLoader.IniPath, typeof(Config), ConfigLoader.Write);
             FruitHud.Register("BombsAway", BuildHud, order: 10);
@@ -89,8 +86,12 @@ namespace BombsAway
         private void UpdateBody()
         {
             ExplosionDebugDraw.Tick();
-            TestBench.Tick(!FruitMenu.IsInputSuppressed);
-            ScaleProbe.Tick(!FruitMenu.IsInputSuppressed);
+            // The debug keys (test bench, scale probe) only answer with DebugHotkeys on.
+            if (Config.DebugHotkeys)
+            {
+                TestBench.Tick(!FruitMenu.IsInputSuppressed);
+                ScaleProbe.Tick(!FruitMenu.IsInputSuppressed);
+            }
             TickChain();
             TickPlacement();
             TickHeld();

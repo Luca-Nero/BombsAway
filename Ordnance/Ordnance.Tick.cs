@@ -331,9 +331,10 @@ namespace BombsAway
 
         // ── Claymore sight lines ────────────────────────────────────────────────
 
+        /// <summary>The three lasers, from the bundled model's lenses; none without its rig.</summary>
         private static void CreateSightLines(GrenadeState g)
         {
-            if (g.Obj == null) return;
+            if (g.Obj == null || g.Clay == null) return;
 
             var mat = new Material(Config.FindSpriteShader());
             mat.color = Color.red;
@@ -363,49 +364,20 @@ namespace BombsAway
 
         private static void UpdateSightLines(GrenadeState g)
         {
-            if (g.SightLines == null || g.Obj == null) return;
+            if (g.SightLines == null || g.Obj == null || g.Clay == null) return;
 
+            // From the lenses, and only as far as the first thing in the way.
             Transform t = g.Obj.transform;
-            if (g.Clay != null)
-            {
-                // From the lenses, and only as far as the first thing in the way.
-                float range = Config.MineProximityRange;
-                for (int i = 0; i < 3; i++)
-                {
-                    g.Clay.Laser(i, t, out Vector3 o, out Vector3 d);
-                    float reach = range;
-                    if (Physics.Raycast(o, d, out RaycastHit hit, range, Config.WorldLayerMask, QueryTriggerInteraction.Ignore)
-                        && !hit.collider.transform.IsChildOf(t))
-                        reach = hit.distance;
-                    g.SightLines[i].SetPosition(0, o);
-                    g.SightLines[i].SetPosition(1, o + d * reach);
-                }
-                return;
-            }
-            Vector3 centre = new Vector3(
-                Config.MineSightOriginX,
-                Config.MineSightOriginY,
-                Config.MineSightOriginZ);
-            float sp = Config.MineSightSpacing;
-            float len = Config.MineProximityRange;
-            float halfSpread = 30f;
-
-            Vector3[] origins = {
-                centre + new Vector3(-sp, 0f, 0f),
-                centre,
-                centre + new Vector3( sp, 0f, 0f),
-            };
-            float[] angles = { -halfSpread, 0f, halfSpread };
-
+            float range = Config.MineProximityRange;
             for (int i = 0; i < 3; i++)
             {
-                Vector3 worldOrigin = t.TransformPoint(origins[i]);
-                Vector3 localDir = Quaternion.AngleAxis(angles[i], Vector3.up)
-                                   * Vector3.forward;
-                Vector3 worldDir = t.TransformDirection(localDir);
-
-                g.SightLines[i].SetPosition(0, worldOrigin);
-                g.SightLines[i].SetPosition(1, worldOrigin + worldDir * len);
+                g.Clay.Laser(i, t, out Vector3 o, out Vector3 d);
+                float reach = range;
+                if (Physics.Raycast(o, d, out RaycastHit hit, range, Config.WorldLayerMask, QueryTriggerInteraction.Ignore)
+                    && !hit.collider.transform.IsChildOf(t))
+                    reach = hit.distance;
+                g.SightLines[i].SetPosition(0, o);
+                g.SightLines[i].SetPosition(1, o + d * reach);
             }
         }
     }

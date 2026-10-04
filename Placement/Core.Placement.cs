@@ -47,7 +47,7 @@ namespace BombsAway
         private static IObjectSpawnHologramService _holoSvc;
         private static Material _holoMaterial;
         private static Material _holoTemplateMaterial;
-        private static readonly GameObject[] _holoTemplates = new GameObject[3];
+        private static readonly GameObject[] _holoTemplates = new GameObject[System.Enum.GetValues(typeof(Ordnance)).Length];
         private static bool _holoRunning, _holoVisible;
         private static Ordnance _holoFor;
         private static float _holoRetryAt;
@@ -159,28 +159,8 @@ namespace BombsAway
 
         private static float PlaceYaw(Ordnance o) => _placeYaw[(int)o] + _placeJitter;
 
-        /// <summary>Half the grenade's height, plus a hair so it does not start interpenetrating.</summary>
-        private static float GrenadeRestHeight(Ordnance o)
-        {
-            var prefab = OrdnanceModels.Prefab(o);
-            if (prefab != null) return -OrdnanceModels.LocalBounds(prefab, skipLooseParts: true).min.y + 0.01f;
-
-            OrdnanceVisual(Ordnance.Grenade, out string meshName, out float scale);
-            var mesh = Meshes?.GetMesh(meshName);
-            float half = mesh != null ? mesh.bounds.extents.y * scale : 0.1f;
-            return half + 0.01f;
-        }
-
-        /// <summary>Mesh and scale of each ordnance, as CreateOrdnance builds it.</summary>
-        internal static void OrdnanceVisual(Ordnance o, out string meshName, out float scale)
-        {
-            switch (o)
-            {
-                case Ordnance.Grenade:  meshName = "TAG19_mesh";    scale = 0.10f; break;
-                case Ordnance.Claymore: meshName = "Claymore_mesh"; scale = 0.15f; break;
-                default:                meshName = "C4_mesh";       scale = 0.15f; break;
-            }
-        }
+        /// <summary>How high the grenade's pivot sits resting on its bounds, plus a hair so it does not start interpenetrating.</summary>
+        private static float GrenadeRestHeight(Ordnance o) => OrdnanceModels.RestHeight(o, 0.1f) + 0.01f;
 
         // ── Placing ─────────────────────────────────────────────────────────────
 
@@ -400,27 +380,17 @@ namespace BombsAway
         /// </summary>
         internal static MeshDataHandler BuildHologramTemplate(Ordnance o)
         {
-            // Bundled model: one visual per part, at its offset in the prefab (no Rigidbody or
-            // collider comes along). Otherwise the JSON mesh, scaled as CreateOrdnance scales it.
-            var parts = new List<(string name, Mesh mesh, Vector3 offset, float scale)>();
-            Bounds bounds;
+            // The bundled model: one visual per part, at its offset in the prefab (no Rigidbody or
+            // collider comes along). No model, no preview: placing still works, blind.
             var prefab = OrdnanceModels.Prefab(o);
-            if (prefab != null)
-            {
-                // What gets set down: the body, without the pin and spoon the hand lets go of.
-                foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>(true))
-                    if (mf.sharedMesh != null && !OrdnanceModels.IsLoosePart(mf.name))
-                        parts.Add((mf.name, mf.sharedMesh, prefab.transform.InverseTransformPoint(mf.transform.position), 1f));
-                bounds = OrdnanceModels.LocalBounds(prefab, skipLooseParts: true);
-            }
-            else
-            {
-                OrdnanceVisual(o, out string meshName, out float scale);
-                var mesh = HologramMesh(Meshes?.GetMesh(meshName));
-                if (mesh != null) parts.Add(("Visual", mesh, Vector3.zero, scale));
-                bounds = mesh != null ? new Bounds(mesh.bounds.center * scale, mesh.bounds.size * scale) : default;
-            }
+            if (prefab == null) return null;
+            // What gets set down: the body, without the pin and spoon the hand lets go of.
+            var parts = new List<(string name, Mesh mesh, Vector3 offset)>();
+            foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>(true))
+                if (mf.sharedMesh != null && !OrdnanceModels.IsLoosePart(mf.name))
+                    parts.Add((mf.name, mf.sharedMesh, prefab.transform.InverseTransformPoint(mf.transform.position)));
             if (parts.Count == 0) return null;
+            Bounds bounds = OrdnanceModels.LocalBounds(prefab, skipLooseParts: true);
 
             var root = new GameObject("BA_HoloTemplate_" + o);
             root.SetActive(false);
@@ -432,13 +402,12 @@ namespace BombsAway
             if (_holoTemplateMaterial == null) _holoTemplateMaterial = new Material(Config.FindShader());
 
             var renderers = new Il2CppSystem.Collections.Generic.List<MeshRenderer>();
-            foreach (var (name, mesh, offset, scale) in parts)
+            foreach (var (name, mesh, offset) in parts)
             {
                 var visual = new GameObject(name);
                 visual.layer = IgnoreRaycastLayer;
                 visual.transform.SetParent(root.transform, false);
                 visual.transform.localPosition = offset;
-                visual.transform.localScale = Vector3.one * scale;
                 visual.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var mr = visual.AddComponent<MeshRenderer>();
                 mr.sharedMaterial = _holoTemplateMaterial;
@@ -469,26 +438,6 @@ namespace BombsAway
             mdh.m_meshData = groups;
 
             return mdh;
-        }
-
-        /// <summary>
-        /// The mesh with every submesh folded into one.
-        ///
-        /// MeshGroup.SetMaterial writes a <b>one-element</b> material array, and Unity draws
-        /// submesh N only with material N - so a multi-material mesh showed only its first
-        /// piece: the C4's display bar, the claymore without its legs. A copy, so the real
-        /// ordnance keeps its materials.
-        /// </summary>
-        private static Mesh HologramMesh(Mesh src)
-        {
-            if (src == null || src.subMeshCount <= 1) return src;
-            var merged = Object.Instantiate(src);
-            merged.name = src.name + "_hologram";
-            var all = src.triangles;   // every submesh, concatenated
-            merged.subMeshCount = 1;
-            merged.triangles = all;
-            merged.RecalculateBounds();
-            return merged;
         }
 
         // ── Yaw about the surface normal ────────────────────────────────────────

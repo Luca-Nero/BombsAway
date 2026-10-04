@@ -123,7 +123,6 @@ namespace BombsAway
     {
         /// <summary>Which explosive this is. Registered with FruitLib as "BombsAway." + Kind.</summary>
         public string Kind = "Grenade";
-        public string MeshName = null;
         public bool Sticky = false;
         public DetonationMode Detonation = DetonationMode.Timer;
         public float FuseTime = 2f;
@@ -195,7 +194,6 @@ namespace BombsAway
                 Kind = "Grenade",
                 FragPower = Config.FragPower,
                 ChargeKgTNT = Config.ChargeKgTNT,
-                MeshName = "TAG19_mesh",
                 Sticky = false,
 
                 Detonation = DetonationMode.Timer,
@@ -265,7 +263,6 @@ namespace BombsAway
                 Kind = "C4",
                 FragPower = Config.C4FragPower,
                 ChargeKgTNT = Config.C4ChargeKgTNT,
-                MeshName = UnityEngine.Random.Range(1, 10000000) == 1 ? "Car46_mesh" : "C4_mesh",
                 Sticky = true,
 
                 Detonation = DetonationMode.Remote,
@@ -301,7 +298,6 @@ namespace BombsAway
                 Kind = "Claymore",
                 FragPower = Config.MineFragPower,
                 ChargeKgTNT = Config.MineChargeKgTNT,
-                MeshName = "Claymore_mesh",
                 Sticky = true,
 
                 Detonation = DetonationMode.Proximity,
@@ -342,7 +338,6 @@ namespace BombsAway
                 Kind = "Missile",
                 FragPower = Config.MissileFragPower,
                 ChargeKgTNT = Config.MissileChargeKgTNT,
-                MeshName = "Javelin_mesh",
                 Sticky = false,
 
                 Detonation = DetonationMode.Impact,
@@ -387,7 +382,6 @@ namespace BombsAway
                 Kind = "MissileHE",
                 FragPower = Config.MissileHEFragPower,
                 ChargeKgTNT = Config.MissileHEChargeKgTNT,
-                MeshName = "Javelin_mesh",
                 Sticky = false,
 
                 Detonation = DetonationMode.Impact,
@@ -432,7 +426,6 @@ namespace BombsAway
                 Kind = "MissileTBX",
                 ChargeKgTNT = Config.MissileTBXChargeKgTNT,
                 FragPower = 1000,
-                MeshName = "Javelin_mesh",
                 Sticky = false,
 
                 Detonation = DetonationMode.Impact,

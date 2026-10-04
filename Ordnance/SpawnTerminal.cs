@@ -158,7 +158,13 @@ namespace BombsAway
             Vector3 offset = _target != null
                 ? new Vector3(Config.SpawnTermOffsetX, Config.SpawnTermOffsetY, Config.SpawnTermOffsetZ)
                 : new Vector3(Config.SmokeTermOffsetX, Config.SmokeTermOffsetY, Config.SmokeTermOffsetZ);
-            _term.Tick(cam, anchor, offset, Config.SmokeTermYaw, layer);
+            // Behind the model it is spawning (or freeing), in that model's camera: most items are
+            // drawn by the world camera, the AT-4, the binoculars and a model being freed by the
+            // viewmodel one. On the viewmodel camera over a world-drawn item the window always
+            // covered it; beside one on the same camera it cut through it.
+            var model = _target != null ? _target : _gone;
+            _term.Tick(cam, anchor, offset, Config.SmokeTermYaw, model != null ? model.layer : layer,
+                       model != null ? model.transform : null);
         }
 
         /// <summary>The model being put away: its rounds on its own clock, and the bytes leaving it.</summary>

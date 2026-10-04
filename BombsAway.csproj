@@ -21,19 +21,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Remove="C4_mesh.json" />
-    <None Remove="Car46_mesh.json" />
-    <None Remove="Claymore_mesh.json" />
-    <None Remove="Javelin_mesh.json" />
-    <None Remove="TAG19_mesh.json" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Meshes\C4_mesh.json" />
-    <EmbeddedResource Include="Meshes\Car46_mesh.json" />
-    <EmbeddedResource Include="Meshes\Claymore_mesh.json" />
-    <EmbeddedResource Include="Meshes\Javelin_mesh.json" />
-    <EmbeddedResource Include="Meshes\TAG19_mesh.json" />
     <!-- Built in E:\Dev\Unity\BombsAwayBundle (FruitLib > Build Bundles, copy BundlesOut\bombsaway here). -->
     <EmbeddedResource Include="Bundles\bombsaway.bundle" />
     <!-- The terminal's default script; written to UserData\BombsAwayTerminal.txt when that's missing (TerminalScript.cs). -->
