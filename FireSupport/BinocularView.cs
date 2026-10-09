@@ -1,6 +1,3 @@
-using Il2CppPlayer.Appearances.God;
-using Il2CppPlayer.Cam;
-using MelonLoader;
 using UnityEngine;
 
 namespace BombsAway
@@ -11,19 +8,11 @@ namespace BombsAway
     /// that the screen shows at the hip too. While they're up, mouse look slows to match the zoom,
     /// so a mouse movement covers the same share of the picture as without them. The zoom is the
     /// held model's screen camera's (LrfDisplay); the main camera stays as it is. Look speed is
-    /// slowed at the input: the game's GACameraRotation turns each frame's mouse delta into
-    /// pan/tilt as delta x (1.5 x m_currentSensMult)^2 (its mouse setting writes that
-    /// multiplier), so it is scaled by the square root of the slowdown while they're up and put
-    /// back after.
+    /// slowed at the game's input (LookSpeed), as the Javelin's CLU does.
     /// </summary>
     internal static class BinocularView
     {
         private static float _ads;            // 0 = lowered, 1 = at the eyes
-
-        private static GACameraRotation _rot;
-        private static float _nextRotLookup;
-        private static bool _sensHeld;          // we have slowed the game's look multiplier
-        private static float _sensBase, _sensWritten;
 
         public static float Ads => _ads;
         private static float Eased => _ads * _ads * (3f - 2f * _ads);
@@ -98,58 +87,19 @@ namespace BombsAway
             _zoom = _zoom <= 0f ? target
                 : Mathf.Exp(Mathf.Lerp(Mathf.Log(_zoom), Mathf.Log(target), 1f - Mathf.Exp(-dt / ZoomEase)));
             if (Mathf.Abs(_zoom - target) < 0.005f) _zoom = target;
-            SlowLook(_ads > 0f ? Mathf.Clamp(Config.BinoSensitivity / LookZoom, 0.02f, 1f) : 1f);
-        }
-
-        /// <summary>
-        /// Slows mouse look to <paramref name="factor"/> of its speed at the game's own input
-        /// (1 = put it back).
-        /// </summary>
-        private static void SlowLook(float factor)
-        {
-            var rot = Rotation();
-            if (rot == null) return;
-            if (factor >= 0.999f) { RestoreLook(); return; }
-            float cur = rot.m_currentSensMult;
-            // First frame, or the game wrote it since (the mouse setting changed): that's the base.
-            if (!_sensHeld || Mathf.Abs(cur - _sensWritten) > 1e-5f) { _sensBase = cur; _sensHeld = true; }
-            _sensWritten = _sensBase * Mathf.Sqrt(factor);   // the game squares it
-            rot.m_currentSensMult = _sensWritten;
-        }
-
-        private static void RestoreLook()
-        {
-            if (!_sensHeld) return;
-            _sensHeld = false;
-            // Unless the game has written its own value since.
-            if (_rot != null && Mathf.Abs(_rot.m_currentSensMult - _sensWritten) <= 1e-5f) _rot.m_currentSensMult = _sensBase;
-        }
-
-        private static GACameraRotation Rotation()
-        {
-            if (_rot != null) return _rot;
-            if (Time.time < _nextRotLookup) return null;
-            _nextRotLookup = Time.time + 2f;
-            var refs = FruitLib.FruitScene.First<GAReferences>();
-            _rot = refs != null ? refs.CameraRotation : null;
-            if (Config.Dbg1) MelonLogger.Msg($"[Binoculars] camera rotation {(_rot != null ? $"found, sens x{_rot.m_currentSensMult:F2}" : "not found: look speed isn't slowed")}");
-            return _rot;
+            if (_ads > 0f) LookSpeed.Request(Mathf.Clamp(Config.BinoSensitivity / LookZoom, 0.02f, 1f));
         }
 
         /// <summary>Back to the naked eye at once (holstered, scene change).</summary>
         public static void Reset()
         {
-            _ads = 0f;
-            RestoreLook();
+            _ads = 0f;   // LookSpeed puts look back when nobody asks
         }
 
         public static void OnScene()
         {
             _ads = 0f;
             _zoom = -1f;   // the chosen level is kept; only the glide restarts
-            _sensHeld = false;   // the scene's player, and its multiplier, are new
-            _rot = null;
-            _nextRotLookup = 0f;
         }
     }
 }

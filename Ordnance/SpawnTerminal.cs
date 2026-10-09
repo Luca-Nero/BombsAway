@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 using Object = UnityEngine.Object;
 using Random = UnityEngine.Random;
@@ -219,7 +220,8 @@ namespace BombsAway
     /// right now; static flashes hazard yellow, rows tear. Parts on other shaders (the screens) and
     /// on textures made at runtime (the warhead stencil) are hidden meanwhile. Finish puts every
     /// part's own materials back. Each instance keeps its own atlas copies (a model can spawn
-    /// while the last one is still going); the atlases are read once (TexelFight.Read).
+    /// while the last one is still going); the atlases are read once (TexelFight.Read), ahead of
+    /// the first equip (Preload).
     /// </summary>
     internal sealed class ModelPixels
     {
@@ -230,7 +232,7 @@ namespace BombsAway
             public Color32[] Atlas;
             public int W, H;
             public Texture2D Tex;
-            public Color32[] Px;
+            public Il2CppStructArray<Color32> Px;   // in IL2CPP memory, what SetPixels32 takes: kept, never re-made
             public float[] Claim;
         }
 
@@ -291,7 +293,8 @@ namespace BombsAway
             Sheet big = null;
             foreach (var s in _live)
             {
-                for (int i = 0; i < s.Claim.Length; i++) s.Claim[i] = Random.Range(0.02f, 0.98f);
+                var claim = s.Claim;
+                for (int i = 0; i < claim.Length; i++) claim[i] = 0.02f + TexelFight.Rand() * 0.96f;
                 if (big == null || s.W * s.H > big.W * big.H) big = s;
             }
             AtlasLine = big != null ? $"ATLAS {big.W}X{big.H}  {_live.Count} SHEET{(_live.Count == 1 ? "" : "S")}" : "ATLAS NONE";
@@ -299,24 +302,34 @@ namespace BombsAway
             Round(0f);
         }
 
-        /// <summary>One round at progress <paramref name="p"/>: every live sheet's texels.</summary>
+        /// <summary>
+        /// One round at progress <paramref name="p"/>: every live sheet's texels. Plain managed
+        /// code per texel: Unity's Mathf, Random and the Color32 constructor are native calls in
+        /// this build (and box their results), and the sheet's native array is indexed through
+        /// one span (its indexer looks the array up again on every texel).
+        /// </summary>
         public void Round(float p)
         {
             float g = TexelFight.Contest(p);
             foreach (var s in _live)
             {
+                var atlas = s.Atlas;
+                var claim = s.Claim;
+                var px = NativeSpan.Of(s.Px, atlas.Length);
+                int w = s.W, last = w - 1;
                 for (int y = 0; y < s.H; y++)
                 {
-                    int shift = TexelFight.Tear(g);
-                    for (int x = 0; x < s.W; x++)
+                    int shift = TexelFight.Tear(g), row = y * w;
+                    for (int x = 0; x < w; x++)
                     {
-                        int i = y * s.W + x;
-                        int sx = Mathf.Clamp(x - shift, 0, s.W - 1);
-                        Color32 a = s.Atlas[i];
-                        bool there = TexelFight.Taken(p, g, s.Claim[y * s.W + sx]) != _vanish;
-                        if (TexelFight.Flash(g)) s.Px[i] = TexelFight.Static;
-                        else if (there) s.Px[i] = a;
-                        else s.Px[i] = new Color32(a.r, a.g, a.b, 0);
+                        int i = row + x;
+                        int sx = x - shift;
+                        if (sx < 0) sx = 0; else if (sx > last) sx = last;
+                        bool there = TexelFight.Taken(p, g, claim[row + sx]) != _vanish;
+                        if (TexelFight.Flash(g)) { px[i] = TexelFight.Static; continue; }
+                        var c = atlas[i];
+                        if (!there) c.a = 0;
+                        px[i] = c;
                     }
                 }
                 s.Tex.SetPixels32(s.Px);
@@ -382,13 +395,45 @@ namespace BombsAway
             }
         }
 
+        /// <summary>Whether a part on <paramref name="m"/> can be fought over, and on what atlas (null: a white sheet).</summary>
+        private static bool Fightable(Material m, out Texture tex)
+        {
+            tex = null;
+            if (m == null || m.shader == null || m.shader.name != LitShader) return false;
+            tex = m.HasProperty("_BaseMap") ? m.GetTexture("_BaseMap") : null;
+            // Made at runtime and changing as it goes (the warhead stencil): hidden instead.
+            return tex == null || (!string.IsNullOrEmpty(tex.name) && !tex.name.StartsWith("BA_"));
+        }
+
+        private static Queue<Texture> _preload;
+
+        /// <summary>
+        /// Every LateUpdate until done: the held models' atlases read back ahead of any equip
+        /// (TexelFight.Read), one a frame. A read waits on the GPU, which on the equip frame was
+        /// a stall on top of the fight's first round.
+        /// </summary>
+        public static void Preload()
+        {
+            if (_preload == null)
+            {
+                _preload = new Queue<Texture>();
+                var seen = new HashSet<int>();
+                foreach (Ordnance o in Enum.GetValues(typeof(Ordnance)))
+                {
+                    var prefab = OrdnanceModels.HeldPrefab(o);
+                    if (prefab == null) continue;
+                    foreach (var r in prefab.GetComponentsInChildren<Renderer>(true))
+                        foreach (var m in r.sharedMaterials)
+                            if (Fightable(m, out var tex) && tex != null && seen.Add(tex.GetInstanceID())) _preload.Enqueue(tex);
+                }
+            }
+            if (_preload.Count > 0) TexelFight.Read(_preload.Dequeue(), out _, out _);
+        }
+
         /// <summary>An alpha-cut copy of <paramref name="orig"/> on its atlas's live copy, or null if it can't have one.</summary>
         private Material Cutout(Material orig)
         {
-            if (orig == null || orig.shader == null || orig.shader.name != LitShader) return null;
-            var tex = orig.HasProperty("_BaseMap") ? orig.GetTexture("_BaseMap") : null;
-            // Made at runtime and changing as it goes (the warhead stencil): hidden instead.
-            if (tex != null && (string.IsNullOrEmpty(tex.name) || tex.name.StartsWith("BA_"))) return null;
+            if (!Fightable(orig, out var tex)) return null;
             var sheet = SheetFor(tex);
             if (sheet == null) return null;
             if (!_live.Contains(sheet)) _live.Add(sheet);
@@ -413,7 +458,8 @@ namespace BombsAway
             {
                 w = h = 16;
                 atlas = new Color32[w * h];
-                for (int i = 0; i < atlas.Length; i++) atlas[i] = new Color32(255, 255, 255, 255);
+                var white = new Color32(255, 255, 255, 255);
+                for (int i = 0; i < atlas.Length; i++) atlas[i] = white;
             }
             else atlas = TexelFight.Read(tex, out w, out h);
 
@@ -423,7 +469,7 @@ namespace BombsAway
                     Atlas = atlas, W = w, H = h,
                     Tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
                         { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontUnloadUnusedAsset, name = "BA_Spawn" },
-                    Px = new Color32[w * h],
+                    Px = new Il2CppStructArray<Color32>(w * h),
                     Claim = new float[w * h],
                 };
             _sheets[key] = s;   // misses too

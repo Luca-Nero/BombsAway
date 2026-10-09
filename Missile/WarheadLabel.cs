@@ -104,7 +104,7 @@ namespace BombsAway
                     case Phase.Lead:
                         _phase = Phase.Delete; _wait = Key(0.05f); break;
                     case Phase.Delete:
-                        if (_shown.Length > 0) { _shown = _shown.Substring(0, _shown.Length - 1); _wait = Key(0.045f); Sfx.PlayHeld("Keystroke", 0.8f); }
+                        if (_shown.Length > 0) { _shown = _shown.Substring(0, _shown.Length - 1); _wait = Key(0.045f); Sfx.Tap("Keystroke", 0.8f); }
                         else { _phase = Phase.Gap; _wait = 0.16f; }
                         break;
                     case Phase.Gap:
@@ -113,7 +113,7 @@ namespace BombsAway
                         if (_shown.Length < _target.Length)
                         {
                             _shown = _target.Substring(0, _shown.Length + 1);
-                            Sfx.PlayHeld("Keystroke");
+                            Sfx.Tap("Keystroke");
                             // Now and then a hunt for the next key.
                             _wait = Random.value < 0.2f ? Key(0.16f) : Key(0.07f);
                         }

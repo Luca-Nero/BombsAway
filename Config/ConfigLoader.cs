@@ -121,6 +121,7 @@ namespace BombsAway
             ["ArtyTermScale"] = "artillery terminal: its size against the radio log's (1 = the same glyph size); its left edge stays on screen either way",
             ["ArtyTermYaw"] = "artillery terminal: degrees it is turned about its upright after facing you (negative brings its outer edge toward you)",
             ["BinoSensitivity"] = "binoculars: mouse look through them, share of the speed that matches the zoom (1 = matched)",
+            ["CluSensitivity"] = "Javelin: mouse look with the CLU at the eye, share of the speed that matches its zoom (1 = matched)",
             ["LaseRange"] = "binoculars: the rangefinder's reach, metres",
             ["LaseHoldMils"] = "binoculars: how far the reticle may wander off the lased point (mils; the first tick is 10) before the lase pauses",
             ["LaseGrace"] = "binoculars: seconds the reticle may be off the lased point (sway, a twitch) before the lase starts over; the fill pauses meanwhile",

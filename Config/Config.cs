@@ -626,6 +626,7 @@ namespace BombsAway
         public static float AdsBlurEnd = 1.2f;
         public static float CluZoomWide = 4f;           // CLU magnification, WFOV / NFOV
         public static float CluZoomNarrow = 12f;
+        public static float CluSensitivity = 1f;        // mouse look at the eye: share of the speed that matches the zoom
         // C4 arming: flick the cover open, snap the switch, the antenna shoots out (seconds).
         public static float C4CoverTime = 0.09f;
         public static float C4SwitchTime = 0.05f;

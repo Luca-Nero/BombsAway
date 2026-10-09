@@ -267,7 +267,7 @@ namespace BombsAway
                 if (l.K == Kind.Cmd)
                 {
                     int typed = Typed(l, now);
-                    for (; l.Keyed < typed; l.Keyed++) if (l.Keyed % 2 == 0) Sfx.PlayHeld("Keystroke", 0.4f);
+                    for (; l.Keyed < typed; l.Keyed++) if (l.Keyed % 2 == 0) Sfx.Tap("Keystroke", 0.4f);
                 }
                 if (l.Cut >= 0 && !l.CutSounded && Typed(l, now) >= l.Cut && now >= l.Start + l.Cut / l.Rate)
                 {

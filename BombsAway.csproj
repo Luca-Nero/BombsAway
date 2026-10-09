@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>disable</Nullable>
+    <!-- Effects/NativeSpan.cs: IL2CPP arrays' memory as spans (texel loops), as FruitLib does. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!-- MSB3277 = assembly version unification conflicts, thousands of them, from
          referencing MelonLoader's net6 assemblies out of a netstandard2.1 project.

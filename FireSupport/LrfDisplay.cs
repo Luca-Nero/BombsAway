@@ -54,7 +54,7 @@ namespace BombsAway
         private static readonly Color32 Led   = new Color32(255, 66, 41, 255);
         private static readonly Color32 Dim   = new Color32(140, 31, 20, 230);
 
-        private GameObject _camGo;
+        private static readonly ScreenFeed _feed = new ScreenFeed("BA_LrfCam", FeedW, FeedH);   // kept between equips
         private Camera _cam;
         private RenderTexture _rt;
         private Texture2D _hud, _spotTex, _diamondTex;
@@ -89,19 +89,11 @@ namespace BombsAway
 
         private void Build(Transform display, Transform hud, Transform window)
         {
-            _rt = new RenderTexture(FeedW, FeedH, 24) { filterMode = FilterMode.Point, hideFlags = HideFlags.DontUnloadUnusedAsset };
-            _rt.Create();
-
-            _camGo = new GameObject("BA_LrfCam");
-            _camGo.transform.SetParent(window, false);
-            _camGo.transform.localPosition = new Vector3(0f, 0f, 0.01f);
-            _cam = _camGo.AddComponent<Camera>();
-            _cam.targetTexture = _rt;
+            _cam = _feed.Take(window, out _rt);
             _cam.clearFlags = CameraClearFlags.Skybox;
             _cam.nearClipPlane = 0.05f;
             var main = Camera.main;
             if (main != null) { _cam.farClipPlane = main.farClipPlane; _cam.cullingMask = main.cullingMask; }
-            _cam.enabled = false;
 
             var dr = display.GetComponent<Renderer>();
             _displayMat = new Material(dr.sharedMaterial) { hideFlags = HideFlags.DontUnloadUnusedAsset };
@@ -200,8 +192,7 @@ namespace BombsAway
 
         public void Dispose()
         {
-            if (_camGo != null) Object.Destroy(_camGo);
-            if (_rt != null) { _rt.Release(); Object.Destroy(_rt); }
+            if (_cam != null) _feed.Give();
             foreach (Object o in new Object[] { _hud, _spotTex, _diamondTex, _displayMat, _hudMat, _spotMat, _diamondMat, _spotMesh, _diamondMesh })
                 if (o != null) Object.Destroy(o);
             _cam = null;

@@ -198,6 +198,7 @@ namespace BombsAway
             ResetChargesForScene();
             ResetPlacementForScene();
             BinocularView.OnScene();
+            LookSpeed.OnScene();
             FireMission.OnScene();
             _rocketReadyAt = 0f;
         }

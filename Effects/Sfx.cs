@@ -43,8 +43,15 @@ namespace BombsAway
 
         private sealed class Pending { public AudioSource Src; public float At; }
         private static readonly List<Pending> _pending = new List<Pending>();
-        private sealed class Live { public GameObject Go; public float Until; }
+        private sealed class Live
+        {
+            public GameObject Go; public float Until;
+            // Tap's: the source kept for the next tap of the same sound, as authored.
+            public bool Pooled; public int Template; public AudioSource Src; public float Pitch, Volume, Length;
+        }
         private static readonly List<Live> _live = new List<Live>();
+        private const int PoolPerSound = 8;
+        private static readonly Dictionary<int, Stack<Live>> _idle = new Dictionary<int, Stack<Live>>();   // by the template's instance id
 
         /// <summary>
         /// Plays <paramref name="key"/> at <paramref name="at"/>, riding along with
@@ -65,6 +72,44 @@ namespace BombsAway
         {
             var cam = Camera.main;
             return cam != null ? Play(key, cam.transform.position, cam.transform, volume, delay) : null;
+        }
+
+        /// <summary>
+        /// A short sound at the ear that nothing holds on to (a keystroke). Typing asks for dozens
+        /// a second, so the sources are kept and played again instead of made each time; that's
+        /// also why nothing is returned: a source handed out could be playing someone else's tap.
+        /// </summary>
+        public static void Tap(string key, float volume = 1f)
+        {
+            var cam = Camera.main;
+            if (cam == null || Config.SfxVolume <= 0f || !Load() || !_variants.TryGetValue(key, out var list) || list.Count == 0) return;
+            var template = list[Random.Range(0, list.Count)];
+            int id = template.GetInstanceID();
+            Live l = null;
+            if (_idle.TryGetValue(id, out var idle))
+                while (l == null && idle.Count > 0) { l = idle.Pop(); if (l.Go == null || l.Src == null) l = null; }   // gone with a scene
+            if (l == null)
+            {
+                var go = Object.Instantiate(template);
+                go.name = template.name;
+                var src = go.GetComponent<AudioSource>();
+                if (src == null || src.clip == null) { Object.Destroy(go); return; }
+                l = new Live { Go = go, Pooled = true, Template = id, Src = src, Pitch = src.pitch, Volume = src.volume, Length = src.clip.length };
+            }
+            else
+            {
+                l.Src.pitch = l.Pitch;
+                l.Src.volume = l.Volume;
+            }
+            l.Go.transform.SetParent(cam.transform, false);
+            l.Go.transform.position = cam.transform.position;
+            if (!l.Go.activeSelf) l.Go.SetActive(true);
+            Prepare(l.Src, volume);
+            l.Src.Play();
+            l.Until = Time.time + l.Length / Mathf.Max(0.05f, Mathf.Abs(l.Src.pitch)) + 0.2f;
+            _live.Add(l);
+            if (_layers.TryGetValue(key, out var layers))
+                foreach (var t in layers) Spawn(t, cam.transform.position, cam.transform, volume, 0f);
         }
 
         /// <summary>A source already in the world (an explosion's), played from here after <paramref name="delay"/>.</summary>
@@ -118,9 +163,19 @@ namespace BombsAway
             {
                 var l = _live[i];
                 if (l.Go != null && now < l.Until) continue;
-                if (l.Go != null) Object.Destroy(l.Go);
+                if (l.Go != null)
+                {
+                    if (l.Pooled && Idle(l.Template).Count < PoolPerSound) { l.Go.SetActive(false); Idle(l.Template).Push(l); }
+                    else Object.Destroy(l.Go);
+                }
                 _live.RemoveAt(i);
             }
+        }
+
+        private static Stack<Live> Idle(int template)
+        {
+            if (!_idle.TryGetValue(template, out var s)) _idle[template] = s = new Stack<Live>();
+            return s;
         }
 
         /// <summary>RESET BOMBS: every sound playing or still on its way stops.</summary>
@@ -135,6 +190,8 @@ namespace BombsAway
         public static void Clear()
         {
             Stop();
+            foreach (var idle in _idle.Values) foreach (var l in idle) if (l.Go != null) Object.Destroy(l.Go);
+            _idle.Clear();
             _bus = null; _busTried = false;   // the next scene has its own bus handler
         }
 

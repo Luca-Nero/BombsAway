@@ -649,6 +649,13 @@ namespace BombsAway
                 && ((_heldKind == Ordnance.Missile && _clu != null && Holding(Ordnance.Missile))
                     || (_heldKind == Ordnance.Rocket && Holding(Ordnance.Rocket)));
             _ads = Mathf.MoveTowards(_ads, wantAds ? 1f : 0f, dt / Mathf.Max(0.01f, Config.AdsTime));
+            // The CLU slows mouse look to its zoom as it comes up, as the binoculars do.
+            if (_heldKind == Ordnance.Missile && _ads > 0f)
+            {
+                float zoom = Mathf.Max(1f, _cluNfov ? Config.CluZoomNarrow : Config.CluZoomWide);
+                float lookZoom = 1f + (zoom - 1f) * _ads * _ads * (3f - 2f * _ads);
+                LookSpeed.Request(Mathf.Clamp(Config.CluSensitivity / lookZoom, 0.02f, 1f));
+            }
 
             if (_stage != ThrowStage.None) TickThrow(dt);
             if (_heldKind == Ordnance.Rocket) TickAT4(dt);
@@ -682,6 +689,9 @@ namespace BombsAway
             AdsBlur.Set(_heldKind == Ordnance.Missile ? _ads : _lrf != null ? BinocularView.Ads : 0f);
             if (_heldKind == Ordnance.Rocket || _heldKind == Ordnance.Binoculars) ViewmodelCamera.Sync();
             _label?.Tick(Time.deltaTime, WarheadText);
+            // Still being spawned: the screens are hidden until it's whole (ModelPixels), so their
+            // cameras stay off rather than render the scene for nothing.
+            if (Spawning) return;
             _lrf?.Tick(BinocularView.Ads, LrfStateNow(), BinocularView.Zoom);
 
             _clu?.Tick(_ads, new CluState

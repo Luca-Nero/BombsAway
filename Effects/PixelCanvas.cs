@@ -1,3 +1,4 @@
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using UnityEngine;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
@@ -13,6 +14,7 @@ namespace BombsAway
         public readonly int W, H;
         public readonly Color32[] Px;
         private readonly int _textEdge;   // text stops at a glyph starting past this x
+        private Il2CppStructArray<Color32> _native;   // Upload's copy in IL2CPP memory, kept (see Upload)
 
         /// <param name="textMargin">Text is cut where a glyph would start closer than this to the right edge (the terminals' 4); -1 = never.</param>
         public PixelCanvas(int w, int h, int textMargin = -1)
@@ -82,9 +84,16 @@ namespace BombsAway
             }
         }
 
+        /// <summary>
+        /// Px onto <paramref name="tex"/>. SetPixels32 takes an IL2CPP array: handed a managed
+        /// one it allocates and copies a fresh native array every call, so the canvas keeps one
+        /// and copies into it (one lookup of its memory, then a block copy).
+        /// </summary>
         public void Upload(Texture2D tex)
         {
-            tex.SetPixels32(Px);
+            if (_native == null) _native = new Il2CppStructArray<Color32>(Px.Length);
+            new System.Span<Color32>(Px).CopyTo(NativeSpan.Of(_native, Px.Length));
+            tex.SetPixels32(_native);
             tex.Apply(false);
         }
 

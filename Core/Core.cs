@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.28.0";
+        public const string Version = "5.29.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -95,6 +95,7 @@ namespace BombsAway
             Thermobaric.Tick();
             Breeze.Tick();
             TickBinoculars(Time.deltaTime);
+            LookSpeed.Apply();   // after the sights (CLU, binoculars) have asked
             FireMission.Tick();
             RadioLog.Tick();
             FireTerminal.Tick();

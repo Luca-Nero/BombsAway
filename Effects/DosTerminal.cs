@@ -67,7 +67,8 @@ namespace BombsAway
         // Behind a model (Tick's behind): its parts, and how far the window is pushed back (1: not).
         private const float BehindGap = 0.03f;                 // metres between the model's back and the window
         private Transform _behindRoot;
-        private MeshFilter[] _behindParts;
+        private Transform[] _behindParts;
+        private Vector3[] _behindCorners;                      // each part's mesh-bounds corners in its own space, 8 a part
         private float _push = 1f;
 
         private readonly float[] _cellClaim = new float[FieldCols * FieldRows];
@@ -110,7 +111,7 @@ namespace BombsAway
             _doneSounded = false;
             _round = -1;
             _closeAt = -1f;
-            for (int i = 0; i < _cellClaim.Length; i++) _cellClaim[i] = UnityEngine.Random.Range(0.02f, 0.98f);
+            for (int i = 0; i < _cellClaim.Length; i++) _cellClaim[i] = 0.02f + TexelFight.Rand() * 0.96f;
             if (!keepCells) Array.Clear(_cells, 0, _cells.Length);
             _active = _duration > 0f;
             if (!_active) return;
@@ -173,7 +174,7 @@ namespace BombsAway
             int typed = Typed(now);
             while (_typedSounded < typed)
             {
-                if (_typedSounded % 2 == 0) Sfx.PlayHeld("Keystroke", 0.45f);
+                if (_typedSounded % 2 == 0) Sfx.Tap("Keystroke", 0.45f);
                 _typedSounded++;
             }
             if (!_doneSounded && now >= done && _closeAt < 0f) { _doneSounded = true; Sfx.PlayHeld("LrfFix", 0.35f); }
@@ -194,7 +195,7 @@ namespace BombsAway
             foreach (Object o in new Object[] { _go, _mat, _tex, _mesh }) if (o != null) Object.Destroy(o);
             _go = null; _mat = null; _tex = null; _mesh = null;
             _drawnKey = null;
-            _behindRoot = null; _behindParts = null;
+            _behindRoot = null; _behindParts = null; _behindCorners = null;
             _push = 1f;
         }
 
@@ -304,31 +305,60 @@ namespace BombsAway
         /// <summary>
         /// How far <paramref name="model"/> reaches along <paramref name="n"/> (camera space): the
         /// farthest corner of its parts' mesh bounds. Meshes rather than renderers, so the parts a
-        /// spawn keeps hidden until the end count too. -inf with no parts.
+        /// spawn keeps hidden until the end count too. -inf with no parts. Every frame, so the
+        /// corners are kept and taken to camera space by the matrices' own fields: Unity's
+        /// TransformPoint, Dot and Scale are native calls each in this build.
         /// </summary>
         private float Reach(Transform cam, Transform model, Vector3 n)
         {
-            if (model != _behindRoot || _behindParts == null)
-            {
-                _behindRoot = model;
-                _behindParts = model.GetComponentsInChildren<MeshFilter>(true);
-            }
+            if (model != _behindRoot || _behindParts == null) KeepParts(model);
+            Matrix4x4 v = cam.worldToLocalMatrix;
             float reach = float.NegativeInfinity;
             for (int i = 0; i < _behindParts.Length; i++)
             {
-                var mf = _behindParts[i];
-                if (mf == null || !mf.gameObject.activeInHierarchy) continue;
-                var mesh = mf.sharedMesh;
-                if (mesh == null) continue;
-                Bounds b = mesh.bounds;
-                var part = mf.transform;
-                for (int c = 0; c < 8; c++)
+                var part = _behindParts[i];
+                if (part == null || !part.gameObject.activeInHierarchy) continue;
+                Matrix4x4 m = part.localToWorldMatrix;
+                for (int c = i * 8, end = c + 8; c < end; c++)
                 {
-                    var corner = b.center + Vector3.Scale(b.extents, new Vector3((c & 1) == 0 ? -1 : 1, (c & 2) == 0 ? -1 : 1, (c & 4) == 0 ? -1 : 1));
-                    reach = Mathf.Max(reach, Vector3.Dot(cam.InverseTransformPoint(part.TransformPoint(corner)), n));
+                    Vector3 p = _behindCorners[c];
+                    float wx = m.m00 * p.x + m.m01 * p.y + m.m02 * p.z + m.m03;
+                    float wy = m.m10 * p.x + m.m11 * p.y + m.m12 * p.z + m.m13;
+                    float wz = m.m20 * p.x + m.m21 * p.y + m.m22 * p.z + m.m23;
+                    float cx = v.m00 * wx + v.m01 * wy + v.m02 * wz + v.m03;
+                    float cy = v.m10 * wx + v.m11 * wy + v.m12 * wz + v.m13;
+                    float cz = v.m20 * wx + v.m21 * wy + v.m22 * wz + v.m23;
+                    float d = cx * n.x + cy * n.y + cz * n.z;
+                    if (d > reach) reach = d;
                 }
             }
             return reach;
+        }
+
+        /// <summary>The parts of <paramref name="model"/> with a mesh, and their bounds' corners.</summary>
+        private void KeepParts(Transform model)
+        {
+            _behindRoot = model;
+            var parts = new List<Transform>();
+            var corners = new List<Vector3>();
+            foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
+            {
+                var mesh = mf != null ? mf.sharedMesh : null;
+                if (mesh == null) continue;
+                Bounds b = mesh.bounds;
+                Vector3 lo = b.min, hi = b.max;
+                for (int c = 0; c < 8; c++)
+                {
+                    var corner = lo;
+                    if ((c & 1) != 0) corner.x = hi.x;
+                    if ((c & 2) != 0) corner.y = hi.y;
+                    if ((c & 4) != 0) corner.z = hi.z;
+                    corners.Add(corner);
+                }
+                parts.Add(mf.transform);
+            }
+            _behindParts = parts.ToArray();
+            _behindCorners = corners.ToArray();
         }
 
         /// <summary>Everything the texture shows; it is redrawn when this changes.</summary>
@@ -452,7 +482,7 @@ namespace BombsAway
 
         private static readonly Dictionary<int, (Color32[] px, int w, int h)> _atlases = new Dictionary<int, (Color32[], int, int)>();
         private static readonly Queue<int> _atlasOrder = new Queue<int>();
-        private const int MaxAtlases = 8;   // the oldest read is dropped past this (holders keep their array)
+        private const int MaxAtlases = 32;  // the oldest read is dropped past this (holders keep their array): room for every held model's and then some
 
         /// <summary>
         /// A texture's texels on the CPU, read once and kept (the last MaxAtlases): bundle textures aren't readable, so
@@ -478,9 +508,8 @@ namespace BombsAway
                 read = new Texture2D(w, h, TextureFormat.RGBA32, false);
                 read.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
                 read.Apply(false);
-                var px = read.GetPixels32();
                 atlas = new Color32[w * h];
-                for (int i = 0; i < atlas.Length; i++) atlas[i] = px[i];
+                NativeSpan.Of(read.GetPixels32(), atlas.Length).CopyTo(atlas);   // a block copy: the native array's indexer is three native calls a texel
             }
             catch (Exception e)
             {

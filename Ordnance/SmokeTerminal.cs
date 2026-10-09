@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using MelonLoader;
 using UnityEngine;
 using Color = UnityEngine.Color;
@@ -127,7 +128,7 @@ namespace BombsAway
         private bool _readTried;
 
         private Texture2D _tex;
-        private Color32[] _px;
+        private Il2CppStructArray<Color32> _px;   // in IL2CPP memory, what SetPixels32 takes: kept
         private Color[] _old, _cur;           // per texel: what it fights from, what it shows
         private float[] _claim;               // per texel: the progress it gives in at
         private Color _to;
@@ -149,7 +150,7 @@ namespace BombsAway
                 // A second change mid-way fights on from whatever each texel shows.
                 _old[i] = midway ? _cur[i] : from;
                 if (!midway) _cur[i] = from;
-                _claim[i] = Random.Range(0.02f, 0.98f);
+                _claim[i] = 0.02f + TexelFight.Rand() * 0.96f;
             }
         }
 
@@ -166,6 +167,8 @@ namespace BombsAway
             for (int i = 0; i < n; i++)
                 _cur[i] = TexelFight.Taken(p, g, _claim[i]) ? _to : _old[i];
 
+            // Plain managed code per texel (ModelPixels.Round says why).
+            var px = NativeSpan.Of(_px, n);
             for (int y = 0; y < _h; y++)
             {
                 int shift = TexelFight.Tear(g);   // torn rows: the row's claims slide sideways
@@ -176,7 +179,8 @@ namespace BombsAway
                     Color c = sx >= 0 && sx < _w ? _cur[y * _w + sx] : _old[i];
                     if (TexelFight.Flash(g)) c = Static;
                     Color32 a = _atlas[i];
-                    _px[i] = new Color32((byte)(a.r * c.r), (byte)(a.g * c.g), (byte)(a.b * c.b), 255);
+                    a.r = (byte)(a.r * c.r); a.g = (byte)(a.g * c.g); a.b = (byte)(a.b * c.b); a.a = 255;
+                    px[i] = a;
                 }
             }
             _tex.SetPixels32(_px);
@@ -204,7 +208,7 @@ namespace BombsAway
             _tex = new Texture2D(_w, _h, TextureFormat.RGBA32, true)
                 { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontUnloadUnusedAsset, name = "BA_SmokeBand" };
             int n = _w * _h;
-            _px = new Color32[n];
+            _px = new Il2CppStructArray<Color32>(n);
             _old = new Color[n];
             _cur = new Color[n];
             _claim = new float[n];

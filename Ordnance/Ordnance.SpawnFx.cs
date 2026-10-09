@@ -68,6 +68,7 @@ namespace BombsAway
         /// <summary>Every LateUpdate: the spawn's window and its fight.</summary>
         private static void TickSpawnTerminal()
         {
+            if (Config.SpawnTerminal && Camera.main != null) ModelPixels.Preload();
             if (!_spawnTerm.Active) return;
             var cam = Camera.main;
             int layer = cam != null ? ViewmodelCamera.Layer(cam) : -1;
