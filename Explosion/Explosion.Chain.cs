@@ -10,10 +10,11 @@ namespace BombsAway
     // Shot and sympathetic detonation
     // ══════════════════════════════════════════════════════════════════════════════
     //
-    // Any live BombsAway charge - thrown, stuck, placed, or a missile in flight - goes off when
-    // a FruitLib round passes through it (ShootToDetonate), and when another explosion's blast
-    // is strong enough there or one of its fragments hits it (ChainReactions). That explosion
-    // can set off the next, and so on.
+    // Any live BombsAway charge - thrown, stuck, placed, a missile in flight, or a cluster
+    // bomb's dud lying live (AirStrike.Cluster.cs) - goes off when a FruitLib round passes
+    // through it (ShootToDetonate), and when another explosion's blast is strong enough there
+    // or one of its fragments hits it (ChainReactions). That explosion can set off the next,
+    // and so on.
     //
     // Hits are tested against where each charge is, not against its collider: a charge stuck
     // to a moving body has its collider off, and a missile has none.
@@ -73,6 +74,7 @@ namespace BombsAway
                     // A charge the game destroyed since it was queued is skipped; its own tick retires it.
                     if (charge is GrenadeState g && !g.Dead && g.Obj != null) { Explode(g); budget--; }
                     else if (charge is HomingMissileState m && !m.Dead && m.Obj != null) { ExplodeMissile(m); budget--; }
+                    else if (charge is AirStrike.Dud d) AirStrike.SetOff(d);   // with the cluster's bursts, which keep their own pace
                 }
                 catch (System.Exception e) { MelonLogger.Warning($"[Chain] detonation failed: {e.Message}"); }
             }
@@ -84,7 +86,7 @@ namespace BombsAway
             foreach (var p in _pending) if (ReferenceEquals(p.charge, charge)) return;
             float delay = Random.Range(Mathf.Max(0f, Config.ChainDelayMin), Mathf.Max(Config.ChainDelayMin, Config.ChainDelayMax));
             _pending.Add((charge, Time.time + delay));
-            if (Config.Dbg1) MelonLogger.Msg($"[Chain] {(charge is GrenadeState g ? g.Params.Kind : "Missile")} set off by {why}");
+            if (Config.Dbg1) MelonLogger.Msg($"[Chain] {(charge is GrenadeState g ? g.Params.Kind : charge is AirStrike.Dud ? "BLU-97 dud" : "Missile")} set off by {why}");
         }
 
         // ── Shot ─────────────────────────────────────────────────────────────────
@@ -127,7 +129,7 @@ namespace BombsAway
         /// </summary>
         private static void OnExplodedNearby(ExplosionInfo x)
         {
-            if (x.Cosmetic || x.Spec == null || (_grenades.Count == 0 && _missiles.Count == 0)) return;
+            if (x.Cosmetic || x.Spec == null || (_grenades.Count == 0 && _missiles.Count == 0 && AirStrike.LiveDuds.Count == 0)) return;
             var s = x.Spec;
             float reach = s.ChargeKgTNT > 0f
                 ? FruitBlast.RangeFor(s.ChargeKgTNT * (x.HasGround && x.Ground.distance < 0.4f ? s.SurfaceBurstFactor : 1f),
@@ -138,17 +140,20 @@ namespace BombsAway
                 if (!g.Dead && g.Obj != null) Consider(x, g, g.Obj.transform.position, Config.OrdnanceHitRadius, reach);
             foreach (var m in _missiles)
                 if (!m.Dead && m.Obj != null) Consider(x, m, m.Obj.transform.position, MissileHitRadius, reach);
+            foreach (var d in AirStrike.LiveDuds)
+                if (AirStrike.DudAt(d, out Vector3 at)) Consider(x, d, at, Config.OrdnanceHitRadius, reach);
         }
 
         private static void Consider(ExplosionInfo x, object charge, Vector3 at, float radius, float reach)
         {
+            // The draw first, the line of sight only for one that would go: a cluster's hundreds
+            // of bursts each look at every dud.
             float dist = Vector3.Distance(x.Origin, at);
+            bool blast = dist <= reach;
+            float chance = blast ? 1f : FragmentHitChance(x, at, dist, radius);
+            if (chance <= 0f || (!blast && Random.value >= chance)) return;
             if (Blocked(x.Origin, at)) return;
-            if (dist <= reach) { Trigger(charge, $"the blast of {x.Spec.Id}"); return; }
-
-            float chance = FragmentHitChance(x, at, dist, radius);
-            if (chance > 0f && Random.value < chance)
-                Trigger(charge, $"a fragment of {x.Spec.Id} ({chance:P0} chance)");
+            Trigger(charge, blast ? $"the blast of {x.Spec.Id}" : $"a fragment of {x.Spec.Id} ({chance:P0} chance)");
         }
 
         /// <summary>
@@ -160,7 +165,9 @@ namespace BombsAway
         private static float FragmentHitChance(ExplosionInfo x, Vector3 at, float dist, float radius)
         {
             var s = x.Spec;
-            if (s.FragCount <= 0 || s.FragPower <= 0 || dist < 1e-3f) return 0f;
+            // The real fragment count: a kind with targeted fragments has its rays for the scenery only.
+            int frags = s.FragTargeted > 0 ? s.FragTargeted : s.FragCount;
+            if (frags <= 0 || s.FragPower <= 0 || dist < 1e-3f) return 0f;
 
             // Fragments slow as their power falls, exp(-falloff·d), from the speed their power
             // and mass give them at the charge (7.5 power per joule, as FruitLib uses).
@@ -177,7 +184,7 @@ namespace BombsAway
                 steradians = 2f * Mathf.PI * (1f - Mathf.Cos(half));
             }
 
-            float hits = s.FragCount / steradians * (Mathf.PI * radius * radius) / (dist * dist);
+            float hits = frags / steradians * (Mathf.PI * radius * radius) / (dist * dist);
             return 1f - Mathf.Exp(-hits);
         }
 

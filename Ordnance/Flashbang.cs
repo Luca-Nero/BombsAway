@@ -53,15 +53,11 @@ namespace BombsAway
             public float NextCoverCheck;
             // The head's shape in its own space (from its collider): the hand targets and elbows hang off it.
             public Vector3 HeadCenter, HeadExtent;
-            public string HeadShape;
-            public int PlacedLeft, PlacedRight;   // flights started (diagnostics)
             public float LeftSide = -1f;          // the head-local X side the left hand is on
-            public Rigidbody[] Hands;             // the physical hands (diagnostics), found on first use
             // What the hands are placed against: the IK rig's head (see PickFrame), with the turn
             // that maps the physical head's axes (which all the offsets are written in) onto it.
             public Transform Frame;
             public Quaternion FrameQ = Quaternion.identity;
-            public string FrameNote = "";
         }
 
         private static readonly List<Stunned> _stunned = new List<Stunned>();
@@ -389,8 +385,8 @@ namespace BombsAway
                 // each hand across the face to the other one.
                 if (!s.Covering) { PickFrame(s, ik); s.LeftSide = LeftSide(s, ik); }
                 float leftSide = s.LeftSide;
-                if (Place(ik.LeftHandEffectorPlacer, ik.LeftHandEffector, s, Target(s, s.Eyes, leftSide), !s.Covering)) s.PlacedLeft++;
-                if (Place(ik.RightHandEffectorPlacer, ik.RightHandEffector, s, Target(s, s.Eyes, -leftSide), !s.Covering)) s.PlacedRight++;
+                Place(ik.LeftHandEffectorPlacer, ik.LeftHandEffector, s, Target(s, s.Eyes, leftSide), !s.Covering);
+                Place(ik.RightHandEffectorPlacer, ik.RightHandEffector, s, Target(s, s.Eyes, -leftSide), !s.Covering);
                 if (!s.Covering) HoldArms(s, ik, leftSide);
                 s.Covering = true;
             }
@@ -431,10 +427,9 @@ namespace BombsAway
         {
             var refs = ik.FullBodyBiped != null ? ik.FullBodyBiped.references : null;
             var rig = refs?.head;
-            if (rig == null || !Config.FlashCoverOnRig)
+            if (rig == null)
             {
                 s.Frame = s.Head; s.FrameQ = Quaternion.identity;
-                s.FrameNote = rig == null ? "body head (no rig head)" : "body head (FlashCoverOnRig off)";
                 return;
             }
             float gap = Vector3.Distance(rig.position, s.Head.position);
@@ -443,13 +438,12 @@ namespace BombsAway
                 var raw = Quaternion.Inverse(rig.rotation) * s.Head.rotation;
                 _rigToBody = QuarterTurns(raw);
                 _rigToBodyKnown = true;
-                MelonLogger.Msg($"[Flash] rig head vs body head: {Quaternion.Angle(Quaternion.identity, raw):F0} deg apart, " +
-                                $"taken as {Quaternion.Angle(Quaternion.identity, _rigToBody):F0} deg (gap {gap:F2} m)");
+                if (Config.Dbg1)
+                    MelonLogger.Msg($"[Flash] rig head vs body head: {Quaternion.Angle(Quaternion.identity, raw):F0} deg apart, " +
+                                    $"taken as {Quaternion.Angle(Quaternion.identity, _rigToBody):F0} deg (gap {gap:F2} m)");
             }
             s.Frame = rig;
             s.FrameQ = _rigToBody;
-            s.FrameNote = _rigToBodyKnown ? $"rig head, axes turned {Quaternion.Angle(Quaternion.identity, _rigToBody):F0} deg"
-                                          : "rig head, axes not measured yet";
         }
 
         /// <summary>A point given in physical-head axes (from the head's pivot), in the world.</summary>
@@ -489,64 +483,65 @@ namespace BombsAway
         /// </summary>
         private static void MeasureHead(Stunned s, Transform head)
         {
-            s.HeadCenter = Vector3.zero; s.HeadExtent = new Vector3(0.1f, 0.14f, 0.09f); s.HeadShape = "none (defaults)";
+            s.HeadCenter = Vector3.zero; s.HeadExtent = new Vector3(0.1f, 0.14f, 0.09f);
+            string shape = "none (defaults)";
             try
             {
                 foreach (var col in head.GetComponents<Collider>())
                 {
                     if (col == null || col.isTrigger) continue;
                     var box = col.TryCast<BoxCollider>();
-                    if (box != null) { s.HeadCenter = box.center; s.HeadExtent = box.size * 0.5f; s.HeadShape = "box"; return; }
+                    if (box != null) { s.HeadCenter = box.center; s.HeadExtent = box.size * 0.5f; shape = "box"; return; }
                     var mesh = col.TryCast<MeshCollider>();
                     if (mesh != null && mesh.sharedMesh != null)
                     {
                         var b = mesh.sharedMesh.bounds;
-                        s.HeadCenter = b.center; s.HeadExtent = b.extents; s.HeadShape = "mesh"; return;
+                        s.HeadCenter = b.center; s.HeadExtent = b.extents; shape = "mesh"; return;
                     }
-                    // Sphere and capsule radius getters are stripped in this build: their world box, brought
-                    // into head space (exact for a sphere, roughly right for an upright capsule).
-                    var wb = col.bounds;
-                    var scale = head.lossyScale;
-                    s.HeadCenter = head.InverseTransformPoint(wb.center);
-                    s.HeadExtent = new Vector3(wb.extents.x / Mathf.Max(1e-4f, Mathf.Abs(scale.x)),
-                                               wb.extents.y / Mathf.Max(1e-4f, Mathf.Abs(scale.y)),
-                                               wb.extents.z / Mathf.Max(1e-4f, Mathf.Abs(scale.z)));
-                    s.HeadShape = col.GetIl2CppType().Name + " (world box)";
+                    // Sphere and capsule radius getters are stripped in this build: their world box
+                    // (exact for a sphere, roughly right for an upright capsule).
+                    WorldBox(s, head, col);
+                    shape = col.GetIl2CppType().Name + " (world box)";
                     return;
                 }
                 // Nothing on the head's own object: the first solid collider under it.
                 foreach (var col in head.GetComponentsInChildren<Collider>())
                 {
                     if (col == null || col.isTrigger) continue;
-                    var wb = col.bounds;
-                    var scale = head.lossyScale;
-                    s.HeadCenter = head.InverseTransformPoint(wb.center);
-                    s.HeadExtent = new Vector3(wb.extents.x / Mathf.Max(1e-4f, Mathf.Abs(scale.x)),
-                                               wb.extents.y / Mathf.Max(1e-4f, Mathf.Abs(scale.y)),
-                                               wb.extents.z / Mathf.Max(1e-4f, Mathf.Abs(scale.z)));
-                    s.HeadShape = col.GetIl2CppType().Name + " on " + col.name + " (world box)";
+                    WorldBox(s, head, col);
+                    shape = col.GetIl2CppType().Name + " on " + col.name + " (world box)";
                     return;
                 }
             }
-            catch (System.Exception e) { s.HeadShape = "failed: " + e.Message; }
+            catch (System.Exception e) { shape = "failed: " + e.Message; }
             finally
             {
-                if (Config.Dbg1) MelonLogger.Msg($"[Flash] head {s.HeadShape}: centre {s.HeadCenter}, half size {s.HeadExtent}");
+                if (Config.Dbg1) MelonLogger.Msg($"[Flash] head {shape}: centre {s.HeadCenter}, half size {s.HeadExtent}");
             }
         }
 
-        /// <summary>Starts the hand's flight to <paramref name="local"/> (physical-head axes, on the frame); true if it did.</summary>
-        private static bool Place(HandEffectorPlacer placer, Transform effector, Stunned s, Vector3 local, bool first)
+        /// <summary>The head's middle and half size from <paramref name="col"/>'s world box, brought into head space.</summary>
+        private static void WorldBox(Stunned s, Transform head, Collider col)
         {
-            if (placer == null || s.Frame == null) return false;
+            var wb = col.bounds;
+            var scale = head.lossyScale;
+            s.HeadCenter = head.InverseTransformPoint(wb.center);
+            s.HeadExtent = new Vector3(wb.extents.x / Mathf.Max(1e-4f, Mathf.Abs(scale.x)),
+                                       wb.extents.y / Mathf.Max(1e-4f, Mathf.Abs(scale.y)),
+                                       wb.extents.z / Mathf.Max(1e-4f, Mathf.Abs(scale.z)));
+        }
+
+        /// <summary>Starts the hand's flight to <paramref name="local"/> (physical-head axes, on the frame).</summary>
+        private static void Place(HandEffectorPlacer placer, Transform effector, Stunned s, Vector3 local, bool first)
+        {
+            if (placer == null || s.Frame == null) return;
             if (!first)
             {
-                if (placer.InFlight) return false;
-                if (effector != null && Vector3.Distance(effector.position, FramePoint(s, local)) < 0.08f) return false;
+                if (placer.InFlight) return;
+                if (effector != null && Vector3.Distance(effector.position, FramePoint(s, local)) < 0.08f) return;
             }
             placer.SetLocalPosition(s.FrameQ * local, s.Frame, first ? 1.6f : 1f, true,
                 new Il2CppSystem.Nullable<Vector3>(), new Il2CppSystem.Nullable<Quaternion>(), null);
-            return true;
         }
 
         private static void Uncover(Stunned s)
@@ -578,7 +573,6 @@ namespace BombsAway
         // The blind: full for a hold, then clearing slowly (the way shooters do it: you are
         // properly blind for a few seconds, then the world comes back through the glare).
         private static float _blindStart, _blindHold, _blindFade, _blindPeak;
-        private static Texture2D _white;
 
         /// <summary>Sight blinds you (white-out or black-out), hearing rings the ears.</summary>
         private static void PlayerEffect(Vector3 origin)
@@ -608,7 +602,7 @@ namespace BombsAway
                 }
                 else _blindPeak = Mathf.Max(_blindPeak, peak);
             }
-            CameraFX.AddKick(0.5f * hearing);
+            CameraFX.AddKick(Config.CamFX(0.5f) * hearing);   // the bang's only shake (ExplosionSystem leaves the flashbang out)
             if (hearing >= 0.15f) StartRing(hearing);
             if (Config.Dbg1) MelonLogger.Msg($"[Flash] you at {d:F1} m: sight {sight:F2} (off walls {reflected:F2}), hearing {hearing:F2}");
         }
@@ -628,12 +622,8 @@ namespace BombsAway
         {
             float alpha = BlindAlpha(Time.time);
             if (alpha <= 0f) return;
-            if (_white == null) { _white = new Texture2D(1, 1); _white.SetPixel(0, 0, Color.white); _white.Apply(); _white.hideFlags = HideFlags.HideAndDontSave; }
             float c = Config.FlashBlackout ? 0f : 1f;
-            var prev = GUI.color;
-            GUI.color = new Color(c, c, c, alpha);
-            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), _white);
-            GUI.color = prev;
+            PixelFont.Box(0f, 0f, Screen.width, Screen.height, new Color(c, c, c, alpha));
         }
 
         // The ringing: one looping sine (FlashRingLoop, 4 kHz in the bundle), its pitch picked per

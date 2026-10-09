@@ -7,8 +7,7 @@ namespace BombsAway
     // ══════════════════════════════════════════════════════════════════════════════
     // The binoculars: a laser rangefinder binocular, the platform for fire support.
     // Right mouse brings their screen up (LrfDisplay, like the Javelin's CLU; BinocularView:
-    // slowed look, zoom levels on the wheel; LrfOverlay draws the old eyepieces when there is no
-    // held model).
+    // slowed look, zoom levels on the wheel).
     // Holding left mouse there lases what is under the reticle; held on it for LaseTime (as
     // the Javelin's lock), the fix is made and the mission called on it (FireMission). The
     // lase holds the point it first ranged; the reticle only has to stay within LaseHoldMils of
@@ -40,7 +39,8 @@ namespace BombsAway
                 return;
             }
 
-            BinocularView.Tick(Input.GetMouseButton(1), dt, _lrf == null);
+            // Not to the eye (nor lased with) until they've finished spawning in.
+            BinocularView.Tick(Input.GetMouseButton(1) && HeldReady(Ordnance.Binoculars), dt);
 
             // The mission: Q / E while they're up (the screen's strip shows it), the warhead key any time.
             int step = 0;
@@ -85,7 +85,7 @@ namespace BombsAway
 
             if (!_laseAnchored)
             {
-                if (!LaseHit(eye, fwd, out Vector3 point))
+                if (!FireMission.PathHit(eye, fwd, Mathf.Max(10f, Config.LaseRange), out Vector3 point, out _, 0.3f))
                 {
                     _laseNoReturn = true;
                     _laseProgress = 0f;
@@ -135,27 +135,11 @@ namespace BombsAway
             _lrfReading = true;
         }
 
-        private static bool LaseHit(Vector3 from, Vector3 dir, out Vector3 point)
-        {
-            point = default;
-            int mask = Config.WorldLayerMask & ~(1 << 2);
-            var hits = Physics.RaycastAll(from, dir, Mathf.Max(10f, Config.LaseRange), mask, QueryTriggerInteraction.Ignore);
-            float best = float.MaxValue;
-            foreach (var h in hits)
-            {
-                if (h.collider == null || h.distance < 0.3f || h.distance >= best) continue;
-                best = h.distance;
-                point = h.point;
-            }
-            return best < float.MaxValue;
-        }
-
-        /// <summary>What the rangefinder shows this frame (its screen, or the eyepiece overlay).</summary>
+        /// <summary>What the rangefinder's screen shows this frame.</summary>
         private static LrfState LrfStateNow()
         {
             var st = new LrfState
             {
-                Ads = BinocularView.Ads,
                 Lasing = _laseAnchored,
                 Progress = _laseProgress,
                 OffMark = _laseOff > 0f,
@@ -163,21 +147,15 @@ namespace BombsAway
                 NoReturn = _laseNoReturn,
                 HasReading = _lrfReading,
                 Range = _lrfRange, AzimuthMils = _lrfAz, ElevationMils = _lrfEl,
-                Mission = FireMission.TypeName,
                 MissionLine = FireMission.Describe,
                 MissionIndex = FireMission.Index,
-                Rounds = FireMission.Rounds,
                 ZoomLevel = BinocularView.Level,
             };
             st.HasMark = FireMission.TryMark(out st.Mark, out st.MarkStatus);
             return st;
         }
 
-        /// <summary>OnGUI: the eyepiece overlay when there is no screen to show it on, and the radio net.</summary>
-        private static void DrawFireSupport()
-        {
-            if (_lrf == null && BinocularView.Ads > 0f && Holding(Ordnance.Binoculars)) LrfOverlay.Draw(LrfStateNow());
-            RadioLog.Draw();
-        }
+        /// <summary>OnGUI: the radio net.</summary>
+        private static void DrawFireSupport() => RadioLog.Draw();
     }
 }

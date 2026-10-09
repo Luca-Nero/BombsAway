@@ -551,18 +551,13 @@ namespace BombsAway
             _sheet.SetPixels32(px);
             _sheet.Apply(false);
             _mat = new Material(src) { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            if (_mat.HasProperty("_BaseMap")) _mat.SetTexture("_BaseMap", _sheet);
-            _mat.mainTexture = _sheet;
+            PixelCanvas.SetTex(_mat, _sheet);
             _block = new MaterialPropertyBlock();
 
             float hw = GlyphW * Texel * 0.5f, hh = GlyphH * Texel * 0.5f;
             for (int i = 0; i < Max; i++)
             {
-                var mesh = new Mesh { hideFlags = HideFlags.DontUnloadUnusedAsset };
-                mesh.SetVertices(new[] { new Vector3(-hw, -hh, 0), new Vector3(hw, -hh, 0), new Vector3(hw, hh, 0), new Vector3(-hw, hh, 0) });
-                mesh.SetUVs(0, new[] { Vector2.zero, Vector2.right, Vector2.one, Vector2.up });
-                mesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
-                mesh.RecalculateBounds();
+                var mesh = PixelCanvas.Quad(hw, hh);
                 var go = new GameObject("BA_Byte");
                 go.transform.SetParent(cam.transform, false);
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;

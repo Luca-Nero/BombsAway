@@ -11,7 +11,7 @@ using Vector3 = UnityEngine.Vector3;
 namespace BombsAway
 {
     /// <summary>
-    /// Each strike's approach, planned at the call (5.25.0, AirDynamicApproach).
+    /// Each strike's approach, planned at the call (5.25.0).
     ///
     /// The reach check: from the mark (lifted a little toward the lase's own line, which is open
     /// air by definition), a bundle of lines is cast back along each attack axis the strike
@@ -197,15 +197,6 @@ namespace BombsAway
         private static Plan PlanGun(Gun g, Vector3 mark, Vector3 observer, bool danger, Func<Plan, Path> build, out Path path)
         {
             var plan = new Plan { Aim = ReachOrigin(mark, observer) };
-            if (!Config.AirDynamicApproach)
-            {
-                plan.Heading = AttackHeading(mark, observer);
-                plan.Angle = g.Dive;
-                plan.BreakSign = BreakAway(plan.Heading, mark, observer);
-                plan.Shape = null;
-                path = build(plan);
-                return plan;
-            }
             float[] dives = Angles(g.Dive, 6f, 50f, 0f, 10f, 20f, -8f);
             var ranked = RankAxes(plan, mark, observer, dives, g.Dive, Config.AirAttackHeading, Mathf.Min(g.Range, 900f), 1.5f, true, danger);
             path = Settle(plan, ranked, mark, observer, build, jet: true, overfly: Random.value < Config.AirOverflyChance, entryG: 4f, span: 10f);
@@ -216,15 +207,6 @@ namespace BombsAway
         private static Plan PlanRockets(float baseDive, Vector3 mark, Vector3 observer, bool danger, Func<Plan, Path> build, out Path path)
         {
             var plan = new Plan { Aim = ReachOrigin(mark, observer) };
-            if (!Config.AirDynamicApproach)
-            {
-                plan.Heading = AttackHeading(mark, observer);
-                plan.Angle = baseDive;
-                plan.BreakSign = BreakAway(plan.Heading, mark, observer);
-                plan.Shape = null;
-                path = build(plan);
-                return plan;
-            }
             float[] dives = Angles(baseDive, 2f, 25f, 0f, 6f, 12f, -4f);
             // The rockets arrive about a degree steeper than the dive they're fired from.
             var ranked = RankAxes(plan, mark, observer, Offset(dives, 1f), baseDive + 1f, Config.AirAttackHeading, 900f, 2f, true, danger);
@@ -241,18 +223,6 @@ namespace BombsAway
         {
             var plan = new Plan { Aim = ReachOrigin(mark, observer) };
             bool herc = k.Craft == Airframe.C130;
-            if (!Config.AirDynamicApproach)
-            {
-                if (_bombBearing < 0f) _bombBearing = Config.JdamHeading >= 0f ? Mathf.Repeat(Config.JdamHeading, 360f) : Random.Range(0f, 360f);
-                plan.Heading = Flat(_bombBearing + Random.Range(-4f, 4f));
-                plan.Angle = k.ImpactAngle;
-                plan.Terminal = Descending(plan.Heading, plan.Angle);
-                plan.BreakSign = BreakAway(plan.Heading, mark, observer);
-                plan.Shape = null;
-                path = build(plan);
-                return plan;
-            }
-
             float fixedAz = Config.JdamHeading >= 0f ? Mathf.Repeat(Config.JdamHeading, 360f) : -1f;
             float[] angles = k.Cluster ? new[] { k.ImpactAngle }
                            : k.Shape == BombShape.Moab ? Angles(k.ImpactAngle, 45f, 88f, 0f, 10f, -10f, -20f)
@@ -402,14 +372,14 @@ namespace BombsAway
 
         /// <summary>The steps typed after the call on the terminal: the plan, and the cover if it's masked.</summary>
         private static string[] CallSteps(Plan plan) =>
-            plan != null && plan.Masked && Config.AirDynamicApproach
+            plan != null && plan.Masked
                 ? new[] { "spawn", "boot", "wake", "call", "plan", "masked" }
-                : Config.AirDynamicApproach ? new[] { "spawn", "boot", "wake", "call", "plan" } : new[] { "spawn", "boot", "wake", "call" };
+                : new[] { "spawn", "boot", "wake", "call", "plan" };
 
         /// <summary>What the radio readback adds for the plan: the overfly, and the cover.</summary>
         private static string PlanWords(Plan plan, bool bomb)
         {
-            if (plan == null || !Config.AirDynamicApproach) return "";
+            if (plan == null) return "";
             string s = plan.Shape != null && plan.Shape.Overfly ? " Overflying." : "";
             if (plan.Masked) s += plan.Delay ? " Target under cover, delay fuze." : bomb ? " Target under cover." : " Target masked, attacking through cover.";
             return s;

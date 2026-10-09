@@ -29,6 +29,9 @@ namespace BombsAway
         private static readonly Dictionary<string, ExplosionSpec> _specs = new Dictionary<string, ExplosionSpec>();
         private static bool _hooked;
 
+        /// <summary>When the last explosion went off, anyone's (a cluster dud's shove then doesn't count without ChainReactions).</summary>
+        internal static float LastBlastAt = -100f;
+
         public static void Init()
         {
             if (_hooked) return;
@@ -85,20 +88,15 @@ namespace BombsAway
             s.HSpreadDeg = p.HSpreadDeg;
             s.VSpreadDeg = p.VSpreadDeg;
 
-            s.BlastRadius = p.BlastRadius;
-            s.BlastForce  = p.BlastForce;
-            s.BlastUpward = p.BlastUpward;
-
-            s.OverpressureRadius     = p.OverpressureRadius;
-            s.OverpressureFalloffExp = p.OverpressureFalloffExp;
-            s.OverpressurePoints     = p.OverpressureWoundPoints;
+            s.OverpressurePoints = p.OverpressureWoundPoints;
 
             s.FragCount   = p.FragRayCount;
             s.FragSpeed   = p.FragSpeed;
             s.FragMaxTime = p.FragMaxTime;
             s.FragImpulse = p.FragImpulse;
             s.FragPower   = p.FragPower;
-            s.ChargeKgTNT = p.ChargeKgTNT;
+            // Never 0: FruitLib would fall back to its old fixed-radius blast.
+            s.ChargeKgTNT = Mathf.Max(0.001f, p.ChargeKgTNT);
             s.BlastPushScale = Config.BlastPushScale * Mathf.Max(0f, p.PushScale);
             s.MaxPushRange   = p.MaxPushRange;
             s.MaxInjuryRange = p.MaxInjuryRange;
@@ -175,6 +173,7 @@ namespace BombsAway
 
         private static void OnExploded(ExplosionInfo x)
         {
+            if (!x.Cosmetic) LastBlastAt = Time.time;
             // Any explosion pushes smoke, whoever's it is.
             if (x.Spec != null)
             {
@@ -188,11 +187,10 @@ namespace BombsAway
 
             // The bundle's effect for this kind (ExplosionFx).
             string kind = x.Spec.Id.Substring(SpecPrefix.Length);
-            // A gun run's hits come at 65 to 100 a second: each only nudges the camera.
             bool gunHit = kind == "Gun30" || kind == "Gun20";
-            // A bomb's shake arrives with its blast wave, from much farther off (AirStrike).
-            if (kind.StartsWith("Jdam") || kind == "Moab") AirStrike.Shake(x.Origin, kind);
-            else if (Config.CamFXEnabled) CameraFX.AddTrauma(x.Origin, kind == "Gun30" ? 0.08f : kind == "Gun20" ? 0.05f : kind == "Blu97" ? 0.12f : 1f);
+            // The shake comes with the blast wave and reaches as far as the charge says. The
+            // flashbang's is its own (Flashbang: your ears, and only with FlashPlayer on).
+            if (kind != "Flash") CameraFX.Blast(x.Origin, x.Spec.ChargeKgTNT, ShakeScale(kind));
             // A gun run may draw only every Nth hit's effect, a cluster bomb every Nth bomblet's (AirStrike decides which).
             if (gunHit && !AirStrike.TakeHitFx(kind)) return;
             if (kind == "Blu97" && !AirStrike.TakeBombletFx()) return;
@@ -203,6 +201,18 @@ namespace BombsAway
                 MelonLogger.Msg($"Detonate {x.Spec.Id} at {x.Origin} | cone={x.Spec.HSpreadDeg:F0}x{x.Spec.VSpreadDeg:F0}° " +
                                 $"fwd={x.Forward}{(x.Cosmetic ? " | cosmetic" : "")}");
         }
+
+        /// <summary>
+        /// How hard an explosion shakes close in. A gun run's hits come at 65 to 100 a second and a
+        /// cluster's bomblets by the hundred: each only nudges. The bombs' slow heave shakes hardest.
+        /// </summary>
+        private static float ShakeScale(string kind) => kind switch
+        {
+            "Gun30" => 0.08f,
+            "Gun20" => 0.05f,
+            "Blu97" => 0.12f,
+            _ => kind.StartsWith("Jdam") || kind == "Moab" ? 1.5f : 1f,
+        };
 
         private static void OnDebris(ExplosionSpec s, Vector3 p0, Vector3 vel, float flightTime)
         {
@@ -219,14 +229,6 @@ namespace BombsAway
             var result = Physics.OverlapSphere(pos, radius, mask, q);
             count = result.Length;
             return result;
-        }
-
-        internal static float EllipticalHalfAngle(float azimuth, float tanH, float tanV)
-        {
-            float cosAz = Mathf.Cos(azimuth);
-            float sinAz = Mathf.Sin(azimuth);
-            return Mathf.Atan2(1f,
-                Mathf.Sqrt((cosAz * cosAz) / (tanH * tanH) + (sinAz * sinAz) / (tanV * tanV)));
         }
 
         internal static bool IsLimb(GameObject obj)

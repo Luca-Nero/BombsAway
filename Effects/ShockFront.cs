@@ -22,7 +22,6 @@ namespace BombsAway
     /// </summary>
     internal sealed class ShockFront
     {
-        public const float SpeedOfSound = 343f;
         public const float AmbientKPa = 101.325f;
         /// <summary>Overpressure at which the bend is full, kPa.</summary>
         public const float FullKPa = 40f;
@@ -55,7 +54,7 @@ namespace BombsAway
         public float KPa => IncidentKPa(Radius / W3);
 
         /// <summary>The front's speed now, m/s.</summary>
-        public float Speed => SpeedOfSound * Mathf.Sqrt(1f + 6f / 7f * KPa / AmbientKPa);
+        public float Speed => Sfx.SpeedOfSound * Mathf.Sqrt(1f + 6f / 7f * KPa / AmbientKPa);
 
         /// <summary>Moves the front on by <paramref name="dt"/> seconds (in short steps near the charge, where it is fast).</summary>
         public void Step(float dt)

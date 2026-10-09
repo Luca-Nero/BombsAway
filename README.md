@@ -4,7 +4,7 @@
 ![Game Version](https://img.shields.io/badge/Game-Release-blue?style=flat-square)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-ff5e5b?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/Luca_Nero)
 
-Fully physics-simulated ordnance for FRUKT, each its own item on the inventory's Weapons shelf - put them on your toolbar, left click to use. Throw fragmentation grenades, stick C4 to anything and blow it remotely, cover a corridor with a directional Claymore, put a Javelin anti-tank missile through a rooftop, or point an AT-4 and let it fly. Every blast does real ray-traced fragmentation, overpressure wounding, and camera shake - nothing is faked with a damage sphere.
+Fully physics-simulated ordnance for FRUKT, each its own item on the mod's own Bombs Away shelf in the inventory - put them on your toolbar, left click to use. Throw fragmentation grenades, stick C4 to anything and blow it remotely, cover a corridor with a directional Claymore, put a Javelin anti-tank missile through a rooftop, or point an AT-4 and let it fly. Every blast does real ray-traced fragmentation, overpressure wounding, and camera shake - nothing is faked with a damage sphere.
 
 ---
 
@@ -18,7 +18,7 @@ Fully physics-simulated ordnance for FRUKT, each its own item on the inventory's
     - **Directional Blast:** High-velocity frag (45 m/s) thrown forward through the cone rather than spherically.
 - **Javelin Anti-Tank Missile:** Right click raises the launcher's command launch unit to your eye; hold it on a target to lock, left click to launch. The flight model is built from two aerospace papers on the real FGM-148 - piecewise-linear thrust curve, soft launch at 18° with an ejection impulse, four-phase flight, aerodynamic drag (F = ½ρV²CdA), and Proportional Navigation guidance in the terminal phase.
     - **Two Attack Modes:** TOP ATTACK climbs to 40 m and dives; DIRECT takes a flatter 15 m approach. Press the Javelin's toolbar key again (or **F2**) to switch.
-    - **Two Warheads (F3):** HEAT is a directional shaped charge with a narrow cone; HE is a full-sphere burst with a much larger radius.
+    - **Three Warheads (F3):** HEAT is a directional shaped charge with a narrow cone; HE is a full-sphere burst with a much larger radius; TBX is thermobaric - a fuel cloud ignited, all blast and no fragments, with a longer, wider pressure wave that fills rooms and spills round corners.
     - **Command Launch Unit:** A live sight on the launcher's display with a sim-style HUD. **N** cycles DAY / NIGHT / WHOT / BHOT, the mouse wheel (or middle click) switches the narrow and wide fields of view.
     - **Lock-On:** Keep a target in the sight for 3 s to lock - the whole body or a single limb (setting). The lock drops when you lower the launcher, and optionally when the target strays from your view. **B** releases it; **F4** keeps it through several shots.
 - **AT-4 Anti-Tank Rocket:** Carried on the shoulder; right click brings the flip-up sights to your eye, left click fires straight where it points - no lock, no guidance, just a tracer and a drop. Every fresh tube comes up in its transport state and is made ready on its own - pin yanked, cocking lever slammed forward, safety flicked off - and its sights spring up the first time you raise it. It fires with a proper backblast out of the rear, then the spent tube gets tossed aside and a fresh one comes up. Shares the Javelin's warheads (F3).
@@ -40,7 +40,7 @@ Fully physics-simulated ordnance for FRUKT, each its own item on the inventory's
 
 ## Controls (Defaults)
 
-Grenade, C4, Claymore, Javelin and AT-4 are separate items on the inventory's Weapons shelf. Put the ones you want on your toolbar, select one, then:
+Grenade, C4, Claymore, Javelin and AT-4 are separate items on the inventory's Bombs Away shelf. Put the ones you want on your toolbar, select one, then:
 
 | Input | Action |
 |-----|--------|
@@ -53,7 +53,7 @@ Grenade, C4, Claymore, Javelin and AT-4 are separate items on the inventory's We
 | N (Javelin) | Cycle DAY / NIGHT / WHOT / BHOT |
 | B (Javelin) | Release lock |
 | Its toolbar key again, or F2 (Javelin) | Toggle TOP ATTACK / DIRECT |
-| F3 (Javelin, AT-4) | Toggle HEAT / HE warhead |
+| F3 (Javelin, AT-4) | Cycle HEAT / HE / TBX warhead |
 | F4 (Javelin) | Toggle persistent / standard lock |
 
 ## Configuration

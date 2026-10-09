@@ -53,7 +53,7 @@ namespace BombsAway
         /// <summary>Every frame while it is in use: the world camera's field of view may change.</summary>
         public static void Sync()
         {
-            if (_cam != null && _baseCam != null) _cam.fieldOfView = BinocularView.RestFov(_baseCam);   // held models never zoom
+            if (_cam != null && _baseCam != null) _cam.fieldOfView = _baseCam.fieldOfView;
         }
 
         private static void Ensure(Camera baseCam)

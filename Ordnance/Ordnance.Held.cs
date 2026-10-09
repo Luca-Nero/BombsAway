@@ -113,7 +113,7 @@ namespace BombsAway
             DetachHeld(despawn: Config.SpawnTerminal);
             _heldParent = parent;
             _heldKind = kind;
-            if (parent == null || !Config.ShowHeldModels) return;
+            if (parent == null) return;
             // Still reloading after the last shot: the fresh tube comes up when it is nearly done.
             if (kind == Ordnance.Rocket && !RocketReady) _rearmAt = Mathf.Max(Time.time, _rocketReadyAt - Config.RaiseTime - AT4ArmTime);
             else
@@ -154,9 +154,7 @@ namespace BombsAway
                 despawned = DespawnHeld();
             }
             if (_held != null && !despawned) Object.Destroy(_held);
-            _held = null;
-            _heldPin = _heldSpoon = null;
-            _rig = null; _clay = null; DropLauncherParts();
+            ForgetHeld();
             _smokeTerm.Dispose();
             if (!despawned) _spawnTerm.Dispose();
             _heldParent = null;
@@ -230,7 +228,7 @@ namespace BombsAway
             _raise = raise ? 0f : 1f;
             ApplyRaise();
 
-            if (!_pivotLogged)
+            if (Config.Dbg1 && !_pivotLogged)
             {
                 _pivotLogged = true;
                 Vector3 local = cam.transform.InverseTransformPoint(_heldParent.position);
@@ -282,10 +280,17 @@ namespace BombsAway
         {
             if (_held == null) return;
             Object.Destroy(_held);
+            ForgetHeld();
+            _rearmAt = Time.time + Config.RearmDelay;
+        }
+
+        /// <summary>Lets go of the held model and what was bound to its parts; the model itself is the caller's to destroy, dissolve or throw.</summary>
+        private static void ForgetHeld()
+        {
             _held = null;
             _heldPin = _heldSpoon = null;
-            _rig = null; _clay = null; DropLauncherParts();
-            _rearmAt = Time.time + Config.RearmDelay;
+            _rig = null; _clay = null;
+            DropLauncherParts();
         }
 
         // ── Throw ───────────────────────────────────────────────────────────────
@@ -298,7 +303,7 @@ namespace BombsAway
         /// </summary>
         private static bool BeginThrow(RaycastHit? placeAt)
         {
-            if (_heldParent == null || !Config.ShowHeldModels) return false;
+            if (_heldParent == null) return false;
             if (_held == null) return _rearmAt >= 0f;
             if (ThrowAnimating || _raise < 1f || Spawning) return true;
 
@@ -556,8 +561,7 @@ namespace BombsAway
             HeldPose(out Vector3 pos, out Quaternion rot);
             var owned = _label?.Orphan();
             _label = null;
-            _held = null;
-            DropLauncherParts();
+            ForgetHeld();
             _ads = 0f;
             AdsBlur.Set(0f);
 
@@ -619,14 +623,6 @@ namespace BombsAway
                 return;
             }
 
-            if (!Config.ShowHeldModels)
-            {
-                if (_held != null) { Object.Destroy(_held); _held = null; _heldPin = _heldSpoon = null; _rig = null; _clay = null; DropLauncherParts(); }
-                _stage = ThrowStage.None;
-                _rearmAt = -1f;
-                return;
-            }
-
             if (_held == null)
             {
                 if (_rearmAt < 0f || Time.time >= _rearmAt)
@@ -649,7 +645,7 @@ namespace BombsAway
             ApplyRaise();   // every frame: LateUpdate may have moved it up to the eye
 
             // Right mouse: the Javelin's CLU display, or the AT-4's sights, up to the eye.
-            bool wantAds = Input.GetMouseButton(1)
+            bool wantAds = Input.GetMouseButton(1) && HeldReady(_heldKind)
                 && ((_heldKind == Ordnance.Missile && _clu != null && Holding(Ordnance.Missile))
                     || (_heldKind == Ordnance.Rocket && Holding(Ordnance.Rocket)));
             _ads = Mathf.MoveTowards(_ads, wantAds ? 1f : 0f, dt / Mathf.Max(0.01f, Config.AdsTime));
@@ -809,25 +805,24 @@ namespace BombsAway
             _spentAt = Time.time + Config.AT4SpentDelay;
         }
 
-        /// <summary>The AT-4's backblast (Explosion.Vfx.cs), out of the held tube's back, or from behind the shoulder without one.</summary>
+        /// <summary>The AT-4's backblast (Explosion.Vfx.cs), out of the held tube's back.</summary>
         private static void Backblast()
         {
-            var cam = Camera.main;
-            if (cam == null) return;
-            Transform c = cam.transform;
-            Vector3 muzzle, breech;
-            if (_heldKind != Ordnance.Rocket || !HeldEnds(out muzzle, out breech))
-            {
-                muzzle = c.position + c.forward * 0.8f + c.right * 0.2f - c.up * 0.1f;
-                breech = c.position - c.forward * 0.5f + c.right * 0.2f - c.up * 0.1f;
-            }
-            ExplosionVFX.SpawnBackblast(breech, (breech - muzzle).normalized, muzzle);
+            if (_heldKind == Ordnance.Rocket && HeldEnds(out Vector3 muzzle, out Vector3 breech))
+                ExplosionVFX.SpawnBackblast(breech, (breech - muzzle).normalized, muzzle);
             CameraFX.AddKick(Config.CamFX(Config.AT4ShakeTrauma));
         }
 
+        /// <summary>
+        /// The item in hand is all there: spawned in and risen (or there is no model to wait for).
+        /// Until then it can't be fired, lased with or put to the eye.
+        /// </summary>
+        private static bool HeldReady(Ordnance o) =>
+            _heldParent == null || !HasHeldModel(o) || (_heldKind == o && _held != null && _raise >= 1f && !Spawning);
+
         /// <summary>The AT-4 in hand can fire: up and not yet spent (or there is no model to wait for).</summary>
         private static bool RocketInHand =>
-            !Config.ShowHeldModels || _heldParent == null || !HasHeldModel(Ordnance.Rocket)
+            _heldParent == null || !HasHeldModel(Ordnance.Rocket)
             || (_heldKind == Ordnance.Rocket && _held != null && _raise >= 1f && !Spawning && _spentAt < 0f && AT4Armed);
 
         private static void ApplyRaise()

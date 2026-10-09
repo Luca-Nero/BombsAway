@@ -103,9 +103,9 @@ namespace BombsAway
             string grid = FireMission.Grid(mark);
             string rds = $"{k.Count} {k.Net}";
             string ammo = k.Darts ? "FLECHETTE" : "HE", weapon = k.Darts ? "M255A1" : "M151";
-            if (!Config.ArtyStacking && Busy)
+            if (!Config.AirStacking && Busy(Airframe.AH64))
             {
-                if (!RefuseOnTerminal(k.Code, grid, HeloCallsign, k.Count, ammo, weapon, CraftName(Airframe.AH64)))
+                if (!RefuseOnTerminal(Airframe.AH64, k.Code, grid, HeloCallsign, k.Count, ammo, weapon))
                 {
                     RadioLog.Observer($"{HeloCallsign}, grid {grid}. Rockets, {rds}. Over.");
                     RadioLog.Unit(HeloSign, "Unable, engaged. Out.");
@@ -293,11 +293,10 @@ namespace BombsAway
         {
             var run = s.R;
             if (run == null) return;
-            var cam = Camera.main;
             foreach (var r in run.Rockets)
             {
                 if (r.Done || now < r.LaunchAt) continue;
-                if (!r.Launched) Launch(r, run.K, cam);
+                if (!r.Launched) Launch(r, run.K);
 
                 // The flechettes' fuze: the darts are thrown where the rocket is at that moment.
                 float until = Mathf.Min(now, r.BurstAt);
@@ -311,7 +310,7 @@ namespace BombsAway
                     if (FireMission.PathHit(r.LastPos, dir, len, out Vector3 hit, out Vector3 normal))
                     {
                         try { SmokeCloud.Wake(r.LastPos, hit, 0.6f, 4f); } catch { }
-                        if (run.K.Darts) Expel(r, hit - dir * 1f, dir, r.Path.SpeedAt(until), cam, false);   // short: the darts go on into it
+                        if (run.K.Darts) Expel(r, hit - dir * 1f, dir, r.Path.SpeedAt(until), false);   // short: the darts go on into it
                         else HydraBurst(r, hit - dir * 0.15f, normal, dir);
                         continue;
                     }
@@ -321,7 +320,7 @@ namespace BombsAway
 
                 if (now >= r.BurstAt)
                 {
-                    Expel(r, pos, fwd, r.Path.SpeedAt(r.BurstAt), cam, true);
+                    Expel(r, pos, fwd, r.Path.SpeedAt(r.BurstAt), true);
                     continue;
                 }
 
@@ -343,7 +342,7 @@ namespace BombsAway
             }
         }
 
-        private static void Launch(Rocket r, RocketKind k, Camera cam)
+        private static void Launch(Rocket r, RocketKind k)
         {
             r.Launched = true;
             r.LastPos = r.Path.Pos[0];
@@ -351,7 +350,7 @@ namespace BombsAway
             r.Body.transform.SetPositionAndRotation(r.LastPos, Quaternion.LookRotation(r.Path.Fwd[0], r.Path.Up[0]));
             r.TrailGo = RocketTrail(r.LastPos, out r.Trail);
             // The motor's roar leaving the pod, from there, late by the distance.
-            float delay = cam != null ? Vector3.Distance(cam.transform.position, r.LastPos) / SpeedOfSound : 0f;
+            float delay = Sfx.Delay(r.LastPos);
             Sfx.Play("RocketLaunch", r.LastPos, null, 1f, delay);
         }
 
@@ -377,7 +376,7 @@ namespace BombsAway
         /// lifted for its drop. A free cone (FlechetteConeDeg), even across, when the rocket met
         /// something first, or with FlechettePatternRadius 0.
         /// </summary>
-        private static void Expel(Rocket r, Vector3 at, Vector3 fwd, float speed, Camera cam, bool fuzed)
+        private static void Expel(Rocket r, Vector3 at, Vector3 fwd, float speed, bool fuzed)
         {
             EndRocket(r);
             try { ExplosionFx.Play("FlechetteBurst", at, fwd, false, default); } catch { }
@@ -432,7 +431,7 @@ namespace BombsAway
 
             // The darts' rain on the ground, heard once they're there and its sound has come back.
             Vector3 zone = aimed ? centre : at + fwd * range;
-            float delay = Vector3.Distance(at, zone) / Mathf.Max(100f, speed) + (cam != null ? Vector3.Distance(cam.transform.position, zone) / SpeedOfSound : 0f);
+            float delay = Vector3.Distance(at, zone) / Mathf.Max(100f, speed) + Sfx.Delay(zone);
             Sfx.Play("FlechetteRain", zone, null, 1f, delay);
             if (Config.Dbg1)
                 MelonLogger.Msg(aimed

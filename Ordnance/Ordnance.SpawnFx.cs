@@ -96,7 +96,7 @@ namespace BombsAway
             {
                 case Ordnance.Grenade:  return new[] { $"CHARGE {Config.ChargeKgTNT:0.00} KG TNT", $"FUSE {Config.Fuse:0.0} S" };
                 case Ordnance.C4:       return new[] { $"CHARGE {Config.C4ChargeKgTNT:0.00} KG TNT", "DET: REMOTE" };
-                case Ordnance.Claymore: return new[] { $"CHARGE {Config.MineChargeKgTNT:0.00} KG TNT", Config.MineTripwire ? "TRIP: 3 LASERS" : "TRIP: CONE" };
+                case Ordnance.Claymore: return new[] { $"CHARGE {Config.MineChargeKgTNT:0.00} KG TNT", "TRIP: 3 LASERS" };
                 case Ordnance.Missile:  return new[] { $"WARHEAD {WarheadText}", $"ATTACK {MissileAttackMode.ToString().ToUpperInvariant()}" };
                 case Ordnance.Rocket:   return new[] { $"WARHEAD {WarheadText}", "84 MM  ONE SHOT" };
                 case Ordnance.Smoke:    return new[] { $"DYE {SmokeColourName}", $"BURN {Config.SmokeDuration:0} S" };

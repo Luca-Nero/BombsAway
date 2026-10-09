@@ -121,12 +121,51 @@ namespace BombsAway
 
         private static readonly Dictionary<char, string> _bits = new Dictionary<char, string>();
 
-        /// <summary>A glyph's GW x GH cells, top row first, '#' lit; null if there is none. For drawing into textures (LrfDisplay).</summary>
+        /// <summary>A glyph's GW x GH cells, top row first, '#' lit; null if there is none. For drawing into textures (PixelCanvas).</summary>
         public static string Bits(char c)
         {
             if (_bits.TryGetValue(c, out var b)) return b;
             b = Glyphs.TryGetValue(c, out var def) ? def.Replace(" ", "") : null;
             _bits[c] = b;
+            return b;
+        }
+
+        public const int SW = 3, SH = 5;   // the small font's glyph size
+
+        // The small 3x5 font, capitals only: the CLU's labels and the launcher's warhead stencil.
+        private static readonly Dictionary<char, string> SmallGlyphs = new Dictionary<char, string>
+        {
+            ['A'] = ".#. #.# ### #.# #.#",
+            ['B'] = "##. #.# ##. #.# ##.",
+            ['C'] = ".## #.. #.. #.. .##",
+            ['D'] = "##. #.# #.# #.# ##.",
+            ['E'] = "### #.. ##. #.. ###",
+            ['F'] = "### #.. ##. #.. #..",
+            ['G'] = ".## #.. #.# #.# .##",
+            ['H'] = "#.# #.# ### #.# #.#",
+            ['I'] = "### .#. .#. .#. ###",
+            ['K'] = "#.# #.# ##. #.# #.#",
+            ['L'] = "#.. #.. #.. #.. ###",
+            ['N'] = "##. #.# #.# #.# #.#",
+            ['O'] = "### #.# #.# #.# ###",
+            ['P'] = "##. #.# ##. #.. #..",
+            ['R'] = "##. #.# ##. #.# #.#",
+            ['S'] = ".## #.. .#. ..# ##.",
+            ['T'] = "### .#. .#. .#. .#.",
+            ['U'] = "#.# #.# #.# #.# ###",
+            ['W'] = "#.# #.# #.# ### #.#",
+            ['X'] = "#.# #.# .#. #.# #.#",
+            ['Y'] = "#.# #.# .#. .#. .#.",
+        };
+
+        private static readonly Dictionary<char, string> _smallBits = new Dictionary<char, string>();
+
+        /// <summary>A small glyph's SW x SH cells, top row first, '#' lit; null if there is none.</summary>
+        public static string SmallBits(char c)
+        {
+            if (_smallBits.TryGetValue(c, out var b)) return b;
+            b = SmallGlyphs.TryGetValue(c, out var def) ? def.Replace(" ", "") : null;
+            _smallBits[c] = b;
             return b;
         }
 

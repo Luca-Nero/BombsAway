@@ -569,8 +569,9 @@ namespace BombsAway
         /// game's asset and every other hologram keep it.
         ///
         /// It pushes a sparse random set of vertices out along their normals, which throws
-        /// long spikes off our meshes. Welding the triangle-soup exports did not cure it and
-        /// the developer is replacing the effect for release, so it is simply turned off.
+        /// long spikes off our meshes. Welding the triangle-soup exports did not cure it, so it
+        /// is simply turned off. The Release build still ships it on (SpawnHologram and
+        /// ObjectSpawnHologram both enable _USE_VERTEX_GLITCHES in resources.assets).
         /// The keyword picks the shader variant; the float is only its inspector toggle,
         /// set too so the two agree.
         /// </summary>

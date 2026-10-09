@@ -34,7 +34,6 @@ namespace BombsAway
     {
         private const float ShellShown = 0.5f;     // seconds of flight drawn before impact
         private const float CompleteAfter = 2f;    // seconds after the last round: ROUNDS COMPLETE
-        private const float SpeedOfSound = 343f;   // as the bangs' delay (ExplosionFx)
         private const float WhistleFadeIn = 0.5f;  // seconds of flight over which a whistle swells in
 
         private enum Unit { Battery, Mortars }
@@ -117,6 +116,12 @@ namespace BombsAway
         }
 
         private static string Sign(Unit u) => u == Unit.Mortars ? "MTR" : "FDC";
+
+        /// <summary>The terminal's {CRAFT}: the unit's piece.</summary>
+        private static string Craft(Unit u) => u == Unit.Mortars ? "M252" : "M777A2";
+
+        /// <summary>The terminal's {RDS}: RD or RDS, as the count needs.</summary>
+        private static string Rds(int n) => n == 1 ? "RD" : "RDS";
 
         private sealed class Round
         {
@@ -253,16 +258,19 @@ namespace BombsAway
             var p = For(Type);
             string rds = $"{p.Prefix}{p.Rounds} {(p.Rounds == 1 ? "rd" : "rds")} {p.Ammo}";
             // Without a crew: a terminal spawns the unit (prototype, ArtyTerminal), for each mission
-            // the terminal script has a program for (the 155 HE barrage in the default script).
+            // the terminal script has a program for (all five in the default script).
             bool term = Config.ArtyTerminal && TerminalScript.For(p.Code) != null && FireTerminal.Available;
             if (!Config.ArtyStacking && Busy(p.Unit))
             {
+                // The unit answers on the net its running mission is on: that mission's program
+                // on the terminal, or its station on the radio.
                 var call = new Dictionary<string, string>
                 {
-                    ["GRID"] = Grid(mark), ["N"] = p.Rounds.ToString(), ["NWORD"] = FireTerminal.Word(p.Rounds),
-                    ["AMMO"] = p.Ammo.ToUpperInvariant(), ["WEAPON"] = p.Name,
+                    ["GRID"] = Grid(mark), ["N"] = p.Rounds.ToString(), ["NWORD"] = FireTerminal.Word(p.Rounds), ["RDS"] = Rds(p.Rounds),
+                    ["AMMO"] = p.Ammo.ToUpperInvariant(), ["WEAPON"] = p.Name, ["SIGN"] = Sign(p.Unit), ["CRAFT"] = Craft(p.Unit),
                 };
-                if (!(term && FireTerminal.Refuse(LiveTerm(p.Unit), p.Code, call)))
+                var live = LiveTerm(p.Unit);
+                if (!(live != null && FireTerminal.Refuse(live, p.Code, call)))
                 {
                     RadioLog.Observer($"Fire mission. Grid {Grid(mark)}. {rds}. Over.");
                     RadioLog.Unit(Sign(p.Unit), "Unable, mission in progress. Out.");
@@ -293,8 +301,8 @@ namespace BombsAway
                 m.Guns = mark + new Vector3(Mathf.Sin(b), 0f, Mathf.Cos(b)) * range;
                 int az = Mathf.RoundToInt((_bearing[u] + 180f) % 360f * 6400f / 360f) % 6400;   // guns to the mark, mils
                 m.Term.Set("GRID", m.Grid).Set("SPAWN", Grid(m.Guns)).Set("RANGE", range / 1000f).Set("AZ", az.ToString("0000"))
-                      .Set("N", p.Rounds).Set("NWORD", FireTerminal.Word(p.Rounds)).Set("AMMO", p.Ammo).Set("WEAPON", p.Name)
-                      .Set("CRAFT", mortars ? "M252" : "M777A2").Set("SIGN", Sign(p.Unit));
+                      .Set("N", p.Rounds).Set("NWORD", FireTerminal.Word(p.Rounds)).Set("RDS", Rds(p.Rounds)).Set("AMMO", p.Ammo).Set("WEAPON", p.Name)
+                      .Set("CRAFT", Craft(p.Unit)).Set("SIGN", Sign(p.Unit));
                 lead = FireTerminal.Play(m.Term, "spawn", "boot", "wake", "call");
             }
             m.ShotAt = now + lead + Mathf.Max(1f, Config.ArtyShotDelay);
@@ -314,7 +322,7 @@ namespace BombsAway
             return true;
         }
 
-        /// <summary>The terminal session of <paramref name="unit"/>'s newest running mission, if it is on the terminal.</summary>
+        /// <summary>The terminal session of <paramref name="unit"/>'s newest running mission; null if that one is on the radio net.</summary>
         private static TermSession LiveTerm(Unit unit)
         {
             for (int i = _missions.Count - 1; i >= 0; i--)
@@ -498,17 +506,13 @@ namespace BombsAway
                 case Payload.Smoke:
                     SmokeShells.Land(at, normal);
                     break;
-                case Payload.HE81:
-                {
-                    var x = ExplosionParams.FromMortarConfig(at + normal * Config.ArtyBurstLift);
-                    x.Forward = normal;
-                    ExplosionSystem.Detonate(x);
-                    break;
-                }
                 default:
                 {
-                    var x = ExplosionParams.FromArtilleryConfig(at + normal * Config.ArtyBurstLift);
+                    // Its body's side spray leaves square to its flight (the belt, as the bombs').
+                    var x = p.Payload == Payload.HE81 ? ExplosionParams.FromMortarConfig(at + normal * Config.ArtyBurstLift)
+                                                      : ExplosionParams.FromArtilleryConfig(at + normal * Config.ArtyBurstLift);
                     x.Forward = normal;
+                    x.Axis = r.Dir;
                     ExplosionSystem.Detonate(x);
                     break;
                 }
@@ -544,7 +548,7 @@ namespace BombsAway
                 // Doppler at the moment of emission: the shell's speed toward the ear then.
                 Vector3 toEar = ear - at;
                 float closing = toEar.sqrMagnitude > 1e-4f ? w.Speed * Vector3.Dot(w.Dir, toEar.normalized) : 0f;
-                float doppler = SpeedOfSound / Mathf.Max(30f, SpeedOfSound - closing);
+                float doppler = Sfx.SpeedOfSound / Mathf.Max(30f, Sfx.SpeedOfSound - closing);
                 w.Src.pitch = Mathf.Clamp(w.BasePitch * doppler, 0.1f, 3f);
                 w.Src.volume = w.BaseVolume * Mathf.Clamp01((window - s) / WhistleFadeIn);
             }
@@ -559,7 +563,7 @@ namespace BombsAway
         /// </summary>
         private static float EmittedBeforeImpact(Whistle w, Vector3 ear, float now)
         {
-            float c = SpeedOfSound, v = Mathf.Min(w.Speed, SpeedOfSound * 0.95f);
+            float c = Sfx.SpeedOfSound, v = Mathf.Min(w.Speed, Sfx.SpeedOfSound * 0.95f);
             float tau = w.ImpactAt - now;
             Vector3 R = ear - w.Target;
             float rd = Vector3.Dot(R, w.Dir);
@@ -577,8 +581,8 @@ namespace BombsAway
             w.Src = null;
         }
 
-        /// <summary>The first solid thing along a path (never triggers or ignore-raycast parts).</summary>
-        internal static bool PathHit(Vector3 from, Vector3 dir, float length, out Vector3 point, out Vector3 normal)
+        /// <summary>The first solid thing along a path (never triggers or ignore-raycast parts), no nearer than <paramref name="minDist"/>.</summary>
+        internal static bool PathHit(Vector3 from, Vector3 dir, float length, out Vector3 point, out Vector3 normal, float minDist = 0f)
         {
             point = default; normal = Vector3.up;
             if (length <= 0f) return false;
@@ -587,7 +591,7 @@ namespace BombsAway
             float best = float.MaxValue;
             foreach (var h in hits)
             {
-                if (h.collider == null || h.distance >= best) continue;
+                if (h.collider == null || h.distance < minDist || h.distance >= best) continue;
                 best = h.distance;
                 point = h.point;
                 normal = h.normal;

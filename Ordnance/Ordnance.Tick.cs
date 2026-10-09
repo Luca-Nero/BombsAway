@@ -111,7 +111,7 @@ namespace BombsAway
                         if (g.ProxScanAccum >= ep.ProximityInterval)
                         {
                             g.ProxScanAccum = 0f;
-                            bool tripped = g.Clay != null && Config.MineTripwire ? LaserTripped(g) : ProximityScan(g);
+                            bool tripped = g.Clay != null && LaserTripped(g);
                             if (tripped)
                             {
                                 Sfx.Play("ClayTrip", g.Obj.transform.position);
@@ -277,53 +277,6 @@ namespace BombsAway
                 }
                 if (first == null || !ExplosionSystem.IsLimb(first.gameObject)) continue;
                 if (Config.Dbg1) MelonLogger.Msg($"[Claymore] Laser {i} broken by '{first.gameObject.name}' at {best:F1} m");
-                return true;
-            }
-            return false;
-        }
-
-        private static bool ProximityScan(GrenadeState g)
-        {
-            if (g.Obj == null) return false;
-            var ep = g.Params;
-            Vector3 pos = g.Obj.transform.position;
-            Vector3 fwd = ep.Forward.normalized;
-            bool fullSphere = ep.ProximityHSpreadDeg >= 360f && ep.ProximityVSpreadDeg >= 360f;
-
-            Quaternion lookInv = Quaternion.identity;
-            float tanH = 0f, tanV = 0f;
-            if (!fullSphere)
-            {
-                fwd = g.Obj.transform.forward;   // live mesh facing
-                lookInv = Quaternion.Inverse(Quaternion.LookRotation(fwd));
-                float hHalfRad = Mathf.Min(ep.ProximityHSpreadDeg * 0.5f, 180f) * Mathf.Deg2Rad;
-                float vHalfRad = Mathf.Min(ep.ProximityVSpreadDeg * 0.5f, 180f) * Mathf.Deg2Rad;
-                tanH = Mathf.Tan(Mathf.Min(hHalfRad, 1.5f));
-                tanV = Mathf.Tan(Mathf.Min(vHalfRad, 1.5f));
-            }
-
-            var overlaps = ExplosionSystem.OverlapSphereShared(pos, ep.ProximityRadius,
-                Config.FragLayerMask, QueryTriggerInteraction.Ignore, out int count);
-            for (int i = 0; i < count; i++)
-            {
-                var col = overlaps[i];
-                if (col == null) continue;
-                if (!ExplosionSystem.IsLimb(col.gameObject)) continue;
-
-                if (col.transform.IsChildOf(g.Obj.transform)) continue;
-
-                if (!fullSphere)
-                {
-                    Vector3 toTarget = (col.transform.position - pos).normalized;
-                    Vector3 local = lookInv * toTarget;
-                    float azimuth = Mathf.Atan2(local.y, local.x);
-                    float halfAngle = ExplosionSystem.EllipticalHalfAngle(azimuth, tanH, tanV);
-                    if (Vector3.Dot(toTarget, fwd) < Mathf.Cos(halfAngle)) continue;
-                }
-
-                if (Config.Dbg2)
-                    MelonLogger.Msg($"[Prox] Target detected: '{col.gameObject.name}' " +
-                        $"dist={Vector3.Distance(pos, col.transform.position):F2}");
                 return true;
             }
             return false;

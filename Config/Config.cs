@@ -5,17 +5,10 @@ namespace BombsAway
     internal static class Config
     {
         // ── Grenade ───────────────────────────────────────────────────────────────
-        // Blast radius / force and overpressure radius are the old model's, used only when a
-        // charge's ChargeKgTNT is 0: with a charge the blast wave sets push and injury itself.
         [FruitLib.MenuCategory("Grenade")] public static float Fuse = 2f;
         public static float FlashRate = 0.2f;
         [FruitLib.MenuCategory("Grenade")] public static float ThrowForce = 8f;
         [FruitLib.MenuCategory("Grenade")] public static float ThrowArc = -15f;
-        public static float BlastRadius = 5f;
-        public static float BlastForce = 1f;
-        public static float BlastUpward = 1f;
-        public static float OverpressureRadius = 3.5f;
-        public static float OverpressureFalloffExp = 1;
         public static int OverpressureWoundPoints = 12;
         [FruitLib.MenuCategory("Grenade")] public static int FragRayCount = 2000;
         public static float FragSpeed = 15f;
@@ -79,7 +72,6 @@ namespace BombsAway
         public static float FlashHearingOcclusion = 0.6f;   // sound through cover
         public static float FlashHearingStun = 0.4f;        // a body's stun from the bang alone (not seen), share of hearing
         public static float FlashMinStrength = 0.05f;       // below this a body is left alone
-        public static bool FlashCoverOnRig = true;          // hands placed against the IK rig's head (off: the physical head, as in 5.6.3)
         public static float FlashCloseRange = 3f;           // metres: a body this near is blinded whichever way it faces, if the bang can see its head
         // Light off walls (Flashbang.Reflected): a bang in a room blinds whichever way you face.
         [FruitLib.MenuCategory("Flashbang")] public static float FlashReflection = 1f;
@@ -99,11 +91,6 @@ namespace BombsAway
         // ── C4 ────────────────────────────────────────────────────────────────────
         [FruitLib.MenuCategory("C4")] public static float C4ThrowForce = 8f;
         [FruitLib.MenuCategory("C4")] public static float C4ThrowArc = -15f;
-        public static float C4BlastRadius = 5f;
-        public static float C4BlastForce = 1.5f;
-        public static float C4BlastUpward = 1f;
-        public static float C4OverpressureRadius = 5f;
-        public static float C4OverpressureFalloffExp = 1;
         public static int C4OverpressureWoundPoints = 18;
         [FruitLib.MenuCategory("C4")] public static int C4FragRayCount = 2000;
         public static float C4FragSpeed = 20f;
@@ -118,14 +105,8 @@ namespace BombsAway
         [FruitLib.MenuCategory("Claymore")] public static float MineThrowArc = -15f;
         [FruitLib.MenuCategory("Claymore")] public static float MineProximityRange = 10f;
         // Its three lasers are the tripwires (out to MineProximityRange, stopped by walls like the
-        // beams you see): a body breaking one sets it off MineTripDelay later. Off: the old cone.
-        [FruitLib.MenuCategory("Claymore")] public static bool MineTripwire = true;
+        // beams you see): a body breaking one sets it off MineTripDelay later.
         [FruitLib.MenuCategory("Claymore")] public static float MineTripDelay = 0.35f;
-        public static float MineBlastRadius = 6f;
-        public static float MineBlastForce = 1f;
-        public static float MineBlastUpward = 0f;
-        public static float MineOverpressureRadius = 3.5f;
-        public static float MineOverpressureFalloffExp = 1;
         public static int MineOverpressureWoundPoints = 12;
         [FruitLib.MenuCategory("Claymore")] public static int MineFragRayCount = 1000;
         public static float MineFragSpeed = 45f;
@@ -136,11 +117,6 @@ namespace BombsAway
         [FruitLib.MenuCategory("Claymore")] public static float MineChargeKgTNT = 0.9f;
 
         // ── Missile warhead ───────────────────────────────────────────────────────
-        public static float MissileBlastRadius = 3f;
-        public static float MissileBlastForce = 1f;
-        public static float MissileBlastUpward = 0f;
-        public static float MissileOverpressureRadius = 3f;
-        public static float MissileOverpressureFalloffExp = 1;
         public static int MissileOverpressureWoundPoints = 12;
         [FruitLib.MenuCategory("Missile")] public static int MissileFragRayCount = 1000;
         public static float MissileFragSpeed = 30f;
@@ -156,13 +132,14 @@ namespace BombsAway
         [FruitLib.MenuCategory("Missile")] public static int MissileJetSpallCount = 60;
 
         // ── Missile HE warhead ────────────────────────────────────────────────────
-        public static float MissileHEBlastRadius = 6f;
-        public static float MissileHEBlastForce = 4f;
-        public static float MissileHEBlastUpward = 1f;
-        public static float MissileHEOverpressureRadius = 12f;
-        public static float MissileHEOverpressureFalloffExp = 1f;
         public static int MissileHEOverpressureWoundPoints = 24;
-        [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragRayCount = 2000;
+        // 5.28.0: its body's fragments are aimed at the limbs in reach, most in a belt square to
+        // its flight, as the Hydra's (was MissileHEFragRayCount: that many blind rays).
+        [FruitLib.MenuCategory("Missile HE")] public static int MissileHEFragments = 2000;
+        public static int MissileHEWorldRays = 120;
+        public static int MissileHEWalksPerLimb = 2;
+        public static float MissileHEFragBeltDeg = 40f;
+        public static float MissileHEFragBeltShare = 0.7f;
         public static float MissileHEFragSpeed = 30f;
         public static float MissileHEFragMaxTime = 4f;
         public static float MissileHEFragImpulse = 0.2f;
@@ -184,10 +161,6 @@ namespace BombsAway
         public static float MissileTBXSuctionRadius = 14f;     // metres it reaches
         public static float MissileTBXDiffraction = 0.6f;      // what reaches something behind full cover (other charges 0.15)
         public static float MissileTBXCloudLift = 0.6f;        // metres back from the impact the cloud's middle is
-        public static float MissileTBXBlastRadius = 9f;        // the old-model fallbacks (no charge)
-        public static float MissileTBXBlastForce = 6f;
-        public static float MissileTBXBlastUpward = 1.5f;
-        public static float MissileTBXOverpressureRadius = 16f;
         public static int MissileTBXOverpressureWoundPoints = 30;
 
         // ── Fire support (binoculars) ─────────────────────────────────────────────
@@ -202,7 +175,9 @@ namespace BombsAway
         [FruitLib.MenuCategory("Fire Support")] public static float ArtyFlightTime = 10f;
         [FruitLib.MenuCategory("Fire Support")] public static float ArtyChargeKgTNT = 6.6f;
         [FruitLib.MenuCategory("Fire Support")] public static float ArtyDamageScale = 1.5f;
-        [FruitLib.MenuCategory("Fire Support")] public static int ArtyFragRayCount = 2500;
+        // 5.28.0: a shell's fragments are aimed at the limbs in reach, most in a belt square to its
+        // flight, as the bombs' (was ArtyFragRayCount: that many blind rays).
+        [FruitLib.MenuCategory("Fire Support")] public static int ArtyFragments = 2500;
         [FruitLib.MenuCategory("Fire Support")] public static int ArtyFragPower = 3500;
         public static float BinoAdsTime = 0.25f;
         public static float BinoSensitivity = 1f;
@@ -220,21 +195,21 @@ namespace BombsAway
         public static float ArtyWhistleFlight = 7f;
         public static float ArtyBatteryHeading = -1f;
         public static float ArtyDangerClose = 60f;
-        public static bool ArtyStacking = false;
+        public static bool ArtyStacking = false;      // artillery only; air strikes: AirStacking
         public static float ArtyBurstLift = 0.3f;
-        public static float ArtyBlastRadius = 12f;
-        public static float ArtyBlastForce = 6f;
-        public static float ArtyBlastUpward = 2f;
-        public static float ArtyOverpressureRadius = 20f;
         public static int ArtyOverpressureWoundPoints = 24;
         public static float ArtyFragSpeed = 30f;
         public static float ArtyFragMaxTime = 4f;
         public static float ArtyFragImpulse = 0.2f;
+        public static int ArtyWorldRays = 150;
+        public static int ArtyWalksPerLimb = 2;
+        public static float ArtyFragBeltDeg = 40f;
+        public static float ArtyFragBeltShare = 0.7f;
         public static float RadioTypeRate = 40f;
         // Fire support on a terminal instead of the radio net (prototype, FireTerminal.cs): the unit
         // is spawned, a program runs the mission, and both are deleted at the end. What they say is
         // UserData/BombsAwayTerminal.txt (TerminalScript.cs); its programs say which missions they run.
-        /// <summary>Prototype: the 155 mm HE barrage is called through a terminal that spawns its battery and runs it, instead of the radio net.</summary>
+        /// <summary>Prototype: artillery missions (the 155 battery's and the mortars') are called through a terminal that spawns the unit and runs it, instead of the radio net.</summary>
         [FruitLib.MenuCategory("Fire Support")] public static bool ArtyTerminal = true;
         /// <summary>Prototype: air strikes are called through the terminal too, each aircraft run by its own program.</summary>
         [FruitLib.MenuCategory("Fire Support")] public static bool AirTerminal = true;
@@ -258,12 +233,12 @@ namespace BombsAway
         public static float MortarBatteryHeading = -1f;
         public static float MortarChargeKgTNT = 0.95f;
         public static float MortarDamageScale = 1.2f;
-        public static int MortarFragRayCount = 1200;
+        public static int MortarFragments = 1200;       // 5.28.0, aimed as the 155's (was MortarFragRayCount)
+        public static int MortarWorldRays = 100;
+        public static int MortarWalksPerLimb = 2;
+        public static float MortarFragBeltDeg = 50f;    // a thin, rounder body: a wider, weaker belt than the shell's
+        public static float MortarFragBeltShare = 0.6f;
         public static int MortarFragPower = 2500;
-        public static float MortarBlastRadius = 7f;
-        public static float MortarBlastForce = 4f;
-        public static float MortarBlastUpward = 1.5f;
-        public static float MortarOverpressureRadius = 10f;
         public static int MortarOverpressureWoundPoints = 14;
         public static float MortarFragSpeed = 30f;
         public static float MortarFragMaxTime = 3f;
@@ -287,9 +262,9 @@ namespace BombsAway
         public static float PrecisionTerminalSpeed = 200f;
 
         // Air strikes (5.11.0), the AIR page of the strip: an aircraft checks in on the net, runs
-        // in on the lased mark AirTimeOnTarget after the call and attacks it. One at a time unless
-        // ArtyStacking. AirAttackHeading -1 = across your line of sight (the hits walk past you,
-        // never toward you); 0-360 = that heading, degrees from +Z.
+        // in on the lased mark AirTimeOnTarget after the call and attacks it. Each aircraft flies
+        // one strike at a time unless AirStacking (two different ones can be up at once).
+        // AirAttackHeading -1 = planned per strike (below); 0-360 = that heading, degrees from +Z.
         // The 30 mm gun run (A-10, GAU-8): a dive at
         //
         // DiveAngle, opening fire Gun30FireRange
@@ -306,6 +281,7 @@ namespace BombsAway
         public static float AirTimeOnTarget = 18f;
         public static float AirAttackHeading = -1f;
         public static float AirDangerClose = 100f;
+        public static bool AirStacking = false;
         // 5.25.0: each strike plans its own approach at the call (AirStrike.Approach.cs). Attack
         // axes all round the mark and several dive (or impact) angles are tried by casting lines
         // from the mark back along them: the ones that reach it, keep their hits from walking at
@@ -314,9 +290,7 @@ namespace BombsAway
         // The aircraft comes in from a varied bearing and turns onto its run-in (up to
         // AirEntryTurnMax), and after the attack either breaks away before the mark or flies on
         // over it (AirOverflyChance, jets only). Its whole flight is checked against the world.
-        // Off: the 5.24 approaches (across your line of sight; the bombs' bearing per scene).
-        // AirAttackHeading / JdamHeading 0-360 still fix the heading either way.
-        [FruitLib.MenuCategory("Fire Support")] public static bool AirDynamicApproach = true;
+        // AirAttackHeading / JdamHeading 0-360 fix the heading.
         public static float AirApproachVariance = 0.35f;   // 0 = always the best-scoring approach
         public static float AirOverflyChance = 0.5f;
         public static float AirEntryTurnMax = 110f;        // degrees
@@ -337,10 +311,6 @@ namespace BombsAway
         public static float Gun30HEIFragKick = 0.5f;       // m/s each fragment hit gives what it hits, at full speed
         public static int Gun30HEIOverpressurePoints = 8;
         public static int Gun30FxEvery = 1;              // a hit's burst effect on every Nth HEI round (2 = half of them)
-        public static float Gun30BlastRadius = 2.5f;
-        public static float Gun30BlastForce = 1f;
-        public static float Gun30BlastUpward = 0.5f;
-        public static float Gun30OverpressureRadius = 2f;
         public static float Gun30FragSpeed = 30f;
         public static float Gun30FragMaxTime = 1f;
         public static float Gun20RateOfFire = 6000f;
@@ -359,15 +329,11 @@ namespace BombsAway
         public static float Gun20HEIFragKick = 0.3f;
         public static int Gun20HEIOverpressurePoints = 6;
         public static int Gun20FxEvery = 1;
-        public static float Gun20BlastRadius = 1f;
-        public static float Gun20BlastForce = 0.7f;
-        public static float Gun20BlastUpward = 0.4f;
-        public static float Gun20OverpressureRadius = 1.5f;
         public static float Gun20FragSpeed = 30f;
         public static float Gun20FragMaxTime = 1f;
 
-        // JDAMs (5.13.0): a strike jet (EAGLE) runs in high and level on a bearing fixed per scene
-        // (JdamHeading, -1 = random), releases one GBU-38 / -32 / -31 JdamReleaseRange short of
+        // JDAMs (5.13.0): a strike jet (EAGLE) runs in high and level on a planned bearing
+        // (JdamHeading, -1 = planned per drop), releases one GBU-38 / -32 / -31 JdamReleaseRange short of
         // the mark at JdamReleaseAltitude, and the bomb steers itself down onto the mark (CEP
         // JdamCEP), arriving steep (JdamImpactAngle) and fast. It goes off where its path first
         // meets something, or JdamBurstHeight metres short of that along its path (an air burst).
@@ -537,7 +503,6 @@ namespace BombsAway
         [FruitLib.MenuCategory("Homing")] public static bool LockBreaks = true;
         public static float LockBreakAngle = 15f;
         public static float MissileDetonationRadius = 1.5f;
-        public static float MissileLaunchAngle = 18f;
         public static float MissileFlightMotorTime = 5.2f;
         public static float MissileMass = 11.8f;
         public static float MissileDragCoeff = 0.3f;
@@ -574,7 +539,6 @@ namespace BombsAway
         // ── Held charges ──────────────────────────────────────────────────────────
         // First-person model while a grenade or C4 is selected. Pose in the camera's axes
         // (metres right/up/forward, degrees) relative to the game's item pivot.
-        [FruitLib.MenuCategory("Effects")] public static bool ShowHeldModels = true;
         // Equipping as a spawn (prototype, SpawnTerminal.cs): a terminal beside the hand runs
         // SPAWN BA:<ITEM> while the item is fought into existence texel by texel.
         /// <summary>Prototype: equipping spawns the item into view from a terminal instead of raising it.</summary>
@@ -728,20 +692,16 @@ namespace BombsAway
         public static int DebugDrawMaxLines = 3000;
         public static int DebugDrawSpentEvery = 8;
         public static bool DebugDrawBlast = true;
-        // Live lines and labels on every body covering its face (Flashbang.Diagnostics.cs).
-        [FruitLib.MenuCategory("Debug")] public static bool DebugDrawFlashArms = false;
         // An air strike's plan, drawn until it's over: the reach lines tried from the mark (green
         // reach it, red don't), the chosen axis (yellow) and the aircraft's whole flight (cyan).
         // DebugLevel 1 also logs each strike's plan ([Air] MSN nn ... plan:).
         [FruitLib.MenuCategory("Debug")] public static bool DebugDrawAirPlan = false;
         public static int FragLayerMask  = ~0;
         public static int WorldLayerMask = ~0;
-        // The debug keys below do nothing unless this is on.
+        // The test bench key below does nothing unless this is on.
         [FruitLib.MenuCategory("Debug")] public static bool DebugHotkeys = false;
         // Test bench: a row of walls to shoot at (Debug/TestBench.cs). Shift+key clears it.
         [FruitLib.MenuCategory("Debug")] public static KeyCode TestBenchKey = KeyCode.Keypad1;
-        // Logs the game's item, ragdoll and camera sizes (Debug/ScaleProbe.cs); hold a native gun for its hip pose.
-        [FruitLib.MenuCategory("Debug")] public static KeyCode ScaleProbeKey = KeyCode.F9;
         public static int TestBenchWalls = 10;
         public static float TestBenchThickness = 0.1f;
         public static float TestBenchGap = 0.1f;

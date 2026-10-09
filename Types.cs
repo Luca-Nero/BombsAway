@@ -114,17 +114,18 @@ namespace BombsAway
         Impact
     }
 
+    /// <summary>
+    /// One explosive's detonation. The defaults are what most kinds share (impact-fuzed, a full
+    /// sphere, the drawn arcs and debris from the settings); each factory sets only what's its own.
+    /// </summary>
     internal class ExplosionParams
     {
         /// <summary>Which explosive this is. Registered with FruitLib as "BombsAway." + Kind.</summary>
         public string Kind = "Grenade";
         public bool Sticky = false;
-        public DetonationMode Detonation = DetonationMode.Timer;
+        public DetonationMode Detonation = DetonationMode.Impact;
         public float FuseTime = 2f;
         public float FlashTime = 2f;
-        public float ProximityRadius = 2f;
-        public float ProximityHSpreadDeg = 360f;
-        public float ProximityVSpreadDeg = 360f;
         public float ProximityInterval = 0.1f;
         public float ImpactCastRadius = 0.1f;
         public float ImpactCastRange = 0.5f;
@@ -133,11 +134,6 @@ namespace BombsAway
         public Vector3 Forward = Vector3.up;
         public float HSpreadDeg = 360f;
         public float VSpreadDeg = 360f;
-        public float BlastRadius = 6f;
-        public float BlastForce = 5f;
-        public float BlastUpward = 2f;
-        public float OverpressureRadius = 3.5f;
-        public float OverpressureFalloffExp = 1f;
         public int OverpressureWoundPoints = 12;
         public int FragRayCount = 2000;
         public float FragSpeed = 15f;
@@ -146,7 +142,7 @@ namespace BombsAway
         public float DamageScale = 1f;
         /// <summary>Wound power of one fragment at the charge (FruitBallistics).</summary>
         public int FragPower = 3000;
-        /// <summary>The charge as kg of TNT: drives FruitLib's physical overpressure (0 = old radius model).</summary>
+        /// <summary>The charge as kg of TNT: drives FruitLib's blast wave (push and injury).</summary>
         public float ChargeKgTNT = 0f;
         /// <summary>This kind's blast-wave push, times the BlastPushScale setting (the gun runs' bursts throw harder than their charge).</summary>
         public float PushScale = 1f;
@@ -156,8 +152,9 @@ namespace BombsAway
         public float JetPenetration = 0f;
         public int JetPower = 0;
         public int JetSpallCount = 0;
-        public int ArcSteps = 12;
-        public float DebrisRaysRatio = 0.04f;
+        public int ArcSteps = Config.ArcDebugSteps;
+        /// <summary>Share of the fragment rays drawn as debris; the fast-fragment kinds set 0 (their flat arcs would fling it off).</summary>
+        public float DebrisRaysRatio = Config.DebrisRaysRatio;
         /// <summary>Which parts of FruitLib's detonation run (all, unless the kind leaves some out).</summary>
         public FruitLib.ExplosionFeatures Features = FruitLib.ExplosionFeatures.All;
         /// <summary>What still reaches something behind full cover, 0..1 (FruitLib's default 0.15).</summary>
@@ -187,34 +184,17 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "Grenade",
-                FragPower = Config.FragPower,
-                ChargeKgTNT = Config.ChargeKgTNT,
-                Sticky = false,
-
+                Origin = origin,
                 Detonation = DetonationMode.Timer,
                 FuseTime = Config.Fuse,
-                FlashTime = 2f,
 
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = Config.BlastRadius,
-                BlastForce = Config.BlastForce,
-                BlastUpward = Config.BlastUpward,
-
-                OverpressureRadius = Config.OverpressureRadius,
-                OverpressureFalloffExp = Config.OverpressureFalloffExp,
+                FragPower = Config.FragPower,
+                ChargeKgTNT = Config.ChargeKgTNT,
                 OverpressureWoundPoints = Config.OverpressureWoundPoints,
-
                 FragRayCount = Config.FragRayCount,
                 FragSpeed = Config.FragSpeed,
                 FragMaxTime = Config.FragMaxTime,
                 FragImpulse = Config.FragImpulse,
-                ArcSteps = Config.ArcDebugSteps,
-
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.DamageScale,
             };
         }
@@ -241,10 +221,6 @@ namespace BombsAway
             p.FragRayCount = 0;
             p.FragPower = 0;
             p.ChargeKgTNT = Config.FlashChargeKgTNT;
-            p.BlastRadius = 2f;
-            p.BlastForce = 0.3f;
-            p.BlastUpward = 0.2f;
-            p.OverpressureRadius = 0.5f;
             p.OverpressureWoundPoints = 0;
             p.DebrisRaysRatio = 0f;
             p.DamageScale = 0.1f;
@@ -256,32 +232,17 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "C4",
-                FragPower = Config.C4FragPower,
-                ChargeKgTNT = Config.C4ChargeKgTNT,
+                Origin = origin,
                 Sticky = true,
-
                 Detonation = DetonationMode.Remote,
 
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = Config.C4BlastRadius,
-                BlastForce = Config.C4BlastForce,
-                BlastUpward = Config.C4BlastUpward,
-
-                OverpressureRadius = Config.C4OverpressureRadius,
-                OverpressureFalloffExp = Config.C4OverpressureFalloffExp,
+                FragPower = Config.C4FragPower,
+                ChargeKgTNT = Config.C4ChargeKgTNT,
                 OverpressureWoundPoints = Config.C4OverpressureWoundPoints,
-
                 FragRayCount = Config.C4FragRayCount,
                 FragSpeed = Config.C4FragSpeed,
                 FragMaxTime = Config.C4FragMaxTime,
                 FragImpulse = Config.C4FragImpulse,
-
-                ArcSteps = Config.ArcDebugSteps,
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.C4DamageScale,
             };
         }
@@ -291,37 +252,20 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "Claymore",
-                FragPower = Config.MineFragPower,
-                ChargeKgTNT = Config.MineChargeKgTNT,
-                Sticky = true,
-
-                Detonation = DetonationMode.Proximity,
-
                 Origin = origin,
+                Sticky = true,
+                Detonation = DetonationMode.Proximity,
                 Forward = Vector3.forward,
                 HSpreadDeg = 60f,
                 VSpreadDeg = 40f,
 
-                ProximityRadius = Config.MineProximityRange,
-                ProximityHSpreadDeg = 40f,
-                ProximityVSpreadDeg = 40f,
-                ProximityInterval = 0.1f,
-
-                BlastRadius = Config.MineBlastRadius,
-                BlastForce = Config.MineBlastForce,
-                BlastUpward = Config.MineBlastUpward,
-
-                OverpressureRadius = Config.MineOverpressureRadius,
-                OverpressureFalloffExp = Config.MineOverpressureFalloffExp,
+                FragPower = Config.MineFragPower,
+                ChargeKgTNT = Config.MineChargeKgTNT,
                 OverpressureWoundPoints = Config.MineOverpressureWoundPoints,
-
                 FragRayCount = Config.MineFragRayCount,
                 FragSpeed = Config.MineFragSpeed,
                 FragMaxTime = Config.MineFragMaxTime,
                 FragImpulse = Config.MineFragImpulse,
-
-                ArcSteps = Config.ArcDebugSteps,
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.MineDamageScale,
             };
         }
@@ -331,35 +275,21 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "Missile",
-                FragPower = Config.MissileFragPower,
-                ChargeKgTNT = Config.MissileChargeKgTNT,
-                Sticky = false,
-
-                Detonation = DetonationMode.Impact,
+                Origin = origin,
                 ImpactCastRadius = 0.15f,
                 ImpactCastRange = 0.3f,
                 ArmDelay = Config.MissileSoftLaunchTime,  // don't detonate during soft launch
-
-                Origin = origin,
                 Forward = Vector3.forward,
                 HSpreadDeg = 90f,
                 VSpreadDeg = 90f,
 
-                BlastRadius = Config.MissileBlastRadius,
-                BlastForce = Config.MissileBlastForce,
-                BlastUpward = Config.MissileBlastUpward,
-
-                OverpressureRadius = Config.MissileOverpressureRadius,
-                OverpressureFalloffExp = Config.MissileOverpressureFalloffExp,
+                FragPower = Config.MissileFragPower,
+                ChargeKgTNT = Config.MissileChargeKgTNT,
                 OverpressureWoundPoints = Config.MissileOverpressureWoundPoints,
-
                 FragRayCount = Config.MissileFragRayCount,
                 FragSpeed = Config.MissileFragSpeed,
                 FragMaxTime = Config.MissileFragMaxTime,
                 FragImpulse = Config.MissileFragImpulse,
-
-                ArcSteps = Config.ArcDebugSteps,
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.MissileDamageScale,
 
                 JetRays = Config.MissileJetRays,
@@ -375,35 +305,24 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "MissileHE",
-                FragPower = Config.MissileHEFragPower,
-                ChargeKgTNT = Config.MissileHEChargeKgTNT,
-                Sticky = false,
-
-                Detonation = DetonationMode.Impact,
+                Origin = origin,
                 ImpactCastRadius = 0.15f,
                 ImpactCastRange = 0.3f,
                 ArmDelay = Config.MissileSoftLaunchTime,
+                Forward = Vector3.forward,   // set to its flight when it goes off: the belt's axis
 
-                Origin = origin,
-                Forward = Vector3.forward,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = Config.MissileHEBlastRadius,
-                BlastForce = Config.MissileHEBlastForce,
-                BlastUpward = Config.MissileHEBlastUpward,
-
-                OverpressureRadius = Config.MissileHEOverpressureRadius,
-                OverpressureFalloffExp = Config.MissileHEOverpressureFalloffExp,
+                FragPower = Config.MissileHEFragPower,
+                ChargeKgTNT = Config.MissileHEChargeKgTNT,
                 OverpressureWoundPoints = Config.MissileHEOverpressureWoundPoints,
-
-                FragRayCount = Config.MissileHEFragRayCount,
+                // The body's fragments aimed at the limbs in reach, as the Hydra's; the rays only dress the scenery.
+                FragTargeted = Mathf.Max(0, Config.MissileHEFragments),
+                FragRayCount = Mathf.Max(0, Config.MissileHEWorldRays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.MissileHEWalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.MissileHEFragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.MissileHEFragBeltShare),
                 FragSpeed = Config.MissileHEFragSpeed,
                 FragMaxTime = Config.MissileHEFragMaxTime,
                 FragImpulse = Config.MissileHEFragImpulse,
-
-                ArcSteps = Config.ArcDebugSteps,
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.MissileHEDamageScale,
             };
         }
@@ -419,34 +338,18 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "MissileTBX",
-                ChargeKgTNT = Config.MissileTBXChargeKgTNT,
-                FragPower = 1000,
-                Sticky = false,
-
-                Detonation = DetonationMode.Impact,
+                Origin = origin,
                 ImpactCastRadius = 0.15f,
                 ImpactCastRange = 0.3f,
                 ArmDelay = Config.MissileSoftLaunchTime,
-
-                Origin = origin,
                 Forward = Vector3.forward,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
 
-                BlastRadius = Config.MissileTBXBlastRadius,
-                BlastForce = Config.MissileTBXBlastForce,
-                BlastUpward = Config.MissileTBXBlastUpward,
-
-                OverpressureRadius = Config.MissileTBXOverpressureRadius,
-                OverpressureFalloffExp = 0.7f,
+                ChargeKgTNT = Config.MissileTBXChargeKgTNT,
+                FragPower = 1000,
                 OverpressureWoundPoints = Config.MissileTBXOverpressureWoundPoints,
-
                 FragRayCount = 0,
-                FragSpeed = 15f,
                 FragMaxTime = 1f,
                 FragImpulse = 0f,
-
-                ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = 0f,
                 DamageScale = Config.MissileTBXDamageScale,
 
@@ -464,75 +367,52 @@ namespace BombsAway
         /// <summary>
         /// A 155 mm HE shell (M795: about 10.8 kg of TNT in a thick steel body, ~6.6 kg TNT
         /// equivalent of blast), point-detonating where it lands (FireSupport/FireMission.cs).
+        /// Its body's fragments are aimed at the limbs in reach, most in a belt square to its
+        /// flight (the caller sets Axis), as the bombs'.
         /// </summary>
         public static ExplosionParams FromArtilleryConfig(Vector3 origin)
         {
             return new ExplosionParams
             {
                 Kind = "Arty155",
+                Origin = origin,
                 FragPower = Config.ArtyFragPower,
                 ChargeKgTNT = Config.ArtyChargeKgTNT,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = Config.ArtyBlastRadius,
-                BlastForce = Config.ArtyBlastForce,
-                BlastUpward = Config.ArtyBlastUpward,
-
-                OverpressureRadius = Config.ArtyOverpressureRadius,
-                OverpressureFalloffExp = 1f,
                 OverpressureWoundPoints = Config.ArtyOverpressureWoundPoints,
-
-                FragRayCount = Config.ArtyFragRayCount,
+                FragTargeted = Mathf.Max(0, Config.ArtyFragments),
+                FragRayCount = Mathf.Max(0, Config.ArtyWorldRays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.ArtyWalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.ArtyFragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.ArtyFragBeltShare),
                 FragSpeed = Config.ArtyFragSpeed,
                 FragMaxTime = Config.ArtyFragMaxTime,
                 FragImpulse = Config.ArtyFragImpulse,
-
-                ArcSteps = Config.ArcDebugSteps,
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.ArtyDamageScale,
             };
         }
 
         /// <summary>
         /// An 81 mm mortar bomb (M821: about 0.7 kg of Comp B in a thin body, ~0.95 kg TNT
-        /// equivalent), point-detonating where it lands (FireSupport/FireMission.cs).
+        /// equivalent), point-detonating where it lands (FireSupport/FireMission.cs); its
+        /// fragments aimed as the 155's.
         /// </summary>
         public static ExplosionParams FromMortarConfig(Vector3 origin)
         {
             return new ExplosionParams
             {
                 Kind = "Mortar81",
+                Origin = origin,
                 FragPower = Config.MortarFragPower,
                 ChargeKgTNT = Config.MortarChargeKgTNT,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = Config.MortarBlastRadius,
-                BlastForce = Config.MortarBlastForce,
-                BlastUpward = Config.MortarBlastUpward,
-
-                OverpressureRadius = Config.MortarOverpressureRadius,
-                OverpressureFalloffExp = 1f,
                 OverpressureWoundPoints = Config.MortarOverpressureWoundPoints,
-
-                FragRayCount = Config.MortarFragRayCount,
+                FragTargeted = Mathf.Max(0, Config.MortarFragments),
+                FragRayCount = Mathf.Max(0, Config.MortarWorldRays),
+                MaxWalksPerLimb = Mathf.Max(0, Config.MortarWalksPerLimb),
+                FragBeltDeg = Mathf.Clamp(Config.MortarFragBeltDeg, 0f, 180f),
+                FragBeltShare = Mathf.Clamp01(Config.MortarFragBeltShare),
                 FragSpeed = Config.MortarFragSpeed,
                 FragMaxTime = Config.MortarFragMaxTime,
                 FragImpulse = Config.MortarFragImpulse,
-
-                ArcSteps = Config.ArcDebugSteps,
-                DebrisRaysRatio = Config.DebrisRaysRatio,
                 DamageScale = Config.MortarDamageScale,
             };
         }
@@ -545,14 +425,12 @@ namespace BombsAway
         public static ExplosionParams FromGun30Config(Vector3 origin) =>
             GunBurst("Gun30", origin, Config.Gun30HEIChargeKgTNT, Config.Gun30HEIDamageScale, Config.Gun30HEIPushScale,
                      Config.Gun30FragRayCount, Config.Gun30HEIFragPower, Config.Gun30HEIFragKick, Config.Gun30HEIOverpressurePoints,
-                     Config.Gun30BlastRadius, Config.Gun30BlastForce, Config.Gun30BlastUpward, Config.Gun30OverpressureRadius,
                      Config.Gun30FragSpeed, Config.Gun30FragMaxTime);
 
         /// <summary>One 20 mm PGU-28/B round going off where it hits (the F-22's gun run): the 30 mm's, smaller.</summary>
         public static ExplosionParams FromGun20Config(Vector3 origin) =>
             GunBurst("Gun20", origin, Config.Gun20HEIChargeKgTNT, Config.Gun20HEIDamageScale, Config.Gun20HEIPushScale,
                      Config.Gun20FragRayCount, Config.Gun20HEIFragPower, Config.Gun20HEIFragKick, Config.Gun20HEIOverpressurePoints,
-                     Config.Gun20BlastRadius, Config.Gun20BlastForce, Config.Gun20BlastUpward, Config.Gun20OverpressureRadius,
                      Config.Gun20FragSpeed, Config.Gun20FragMaxTime);
 
         /// <summary>
@@ -584,26 +462,12 @@ namespace BombsAway
                     push = Config.Jdam2000PushRange; fragSpeed = 220f; falloff = 0.015f; wounds = Config.Jdam2000MaxWounds;
                     break;
             }
-            float r = Mathf.Pow(Mathf.Max(1f, charge) / 95f, 1f / 3f);   // the old-model fallbacks, by the 500 lb's
             return new ExplosionParams
             {
                 Kind = kind,
+                Origin = origin,
                 FragPower = power,
                 ChargeKgTNT = charge,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = 30f * r,
-                BlastForce = 12f,
-                BlastUpward = 4f,
-
-                OverpressureRadius = 25f * r,
-                OverpressureFalloffExp = 1f,
                 OverpressureWoundPoints = 30,
 
                 // The case's fragments are aimed at the limbs in reach (FruitLib 5.8.0), so every
@@ -618,7 +482,6 @@ namespace BombsAway
                 FragImpulse = 0.3f,
                 FragPowerFalloff = falloff,
 
-                ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = 0f,   // the flat arcs would fling it off at their speed; FX_Jdam has its own clods
                 DamageScale = Config.JdamDamageScale,
 
@@ -639,22 +502,9 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "Hydra",
+                Origin = origin,
                 FragPower = Config.HydraFragPower,
                 ChargeKgTNT = Config.HydraChargeKgTNT,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = 8f,
-                BlastForce = 4.5f,
-                BlastUpward = 1.5f,
-
-                OverpressureRadius = 12f,
-                OverpressureFalloffExp = 1f,
                 OverpressureWoundPoints = 14,
 
                 FragTargeted = Mathf.Max(0, Config.HydraFragments),
@@ -667,7 +517,6 @@ namespace BombsAway
                 FragImpulse = 0.2f,
                 FragPowerFalloff = 0.035f, // ~17 % of its power left at 50 m
 
-                ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = 0f,
                 DamageScale = Config.HydraDamageScale,
                 MaxWounds = Mathf.Max(0, Config.HydraMaxWounds),
@@ -684,26 +533,12 @@ namespace BombsAway
         /// </summary>
         public static ExplosionParams FromMoabConfig(Vector3 origin)
         {
-            float r = Mathf.Pow(Mathf.Max(1f, Config.MoabChargeKgTNT) / 95f, 1f / 3f);   // the old-model fallbacks, by the 500 lb's
             return new ExplosionParams
             {
                 Kind = "Moab",
+                Origin = origin,
                 FragPower = Config.MoabFragPower,
                 ChargeKgTNT = Config.MoabChargeKgTNT,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = 30f * r,
-                BlastForce = 12f,
-                BlastUpward = 4f,
-
-                OverpressureRadius = 25f * r,
-                OverpressureFalloffExp = 1f,
                 OverpressureWoundPoints = 12,   // fewer than the JDAMs' 30: limbs torn this far out are many, and most are blown apart anyway
                 SurfaceBurstScaledHeight = Mathf.Max(0f, Config.MoabSurfaceBurstHeight),
 
@@ -718,7 +553,6 @@ namespace BombsAway
                 FragPowerFalloff = 0.02f,       // 5 % of its power left at 150 m
                 FragPenetrationScale = 0.35f,   // aluminium: about a third of steel's density
 
-                ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = 0f,
                 DamageScale = Config.MoabDamageScale,
 
@@ -742,22 +576,10 @@ namespace BombsAway
             return new ExplosionParams
             {
                 Kind = "Blu97",
-                FragPower = Config.Blu97FragPower,
-                ChargeKgTNT = Config.Blu97ChargeKgTNT,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
                 Origin = origin,
                 Forward = Vector3.down,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = 4f,
-                BlastForce = 3f,
-                BlastUpward = 1f,
-
-                OverpressureRadius = 5f,
-                OverpressureFalloffExp = 1f,
+                FragPower = Config.Blu97FragPower,
+                ChargeKgTNT = Config.Blu97ChargeKgTNT,
                 OverpressureWoundPoints = 6,
 
                 FragTargeted = Mathf.Max(0, Config.Blu97Fragments),
@@ -777,7 +599,6 @@ namespace BombsAway
                 JetPower = Config.Blu97JetPower,
                 JetSpallCount = Mathf.Max(0, Config.Blu97JetSpallCount),
 
-                ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = 0f,
                 DamageScale = Config.Blu97DamageScale,
                 MaxWounds = Mathf.Max(0, Config.Blu97MaxWounds),
@@ -786,41 +607,23 @@ namespace BombsAway
 
         private static ExplosionParams GunBurst(string kind, Vector3 origin, float charge, float damage, float push,
                                                 int frags, int fragPower, float kick, int opPoints,
-                                                float blastRadius, float blastForce, float blastUpward, float opRadius,
                                                 float fragSpeed, float fragMaxTime)
         {
             return new ExplosionParams
             {
                 Kind = kind,
+                Origin = origin,
                 FragPower = fragPower,
                 ChargeKgTNT = charge,
                 PushScale = push,
-                Sticky = false,
-                Detonation = DetonationMode.Impact,
-
-                Origin = origin,
-                Forward = Vector3.up,
-                HSpreadDeg = 360f,
-                VSpreadDeg = 360f,
-
-                BlastRadius = blastRadius,
-                BlastForce = blastForce,
-                BlastUpward = blastUpward,
-
-                OverpressureRadius = opRadius,
-                OverpressureFalloffExp = 1f,
                 OverpressureWoundPoints = opPoints,
-
                 FragRayCount = frags,
                 FragSpeed = fragSpeed,
                 FragMaxTime = fragMaxTime,
                 FragImpulse = kick,
-
-                ArcSteps = Config.ArcDebugSteps,
                 DebrisRaysRatio = 0f,
                 DamageScale = damage,
             };
         }
-
     }
 }

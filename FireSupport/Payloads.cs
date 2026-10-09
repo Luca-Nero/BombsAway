@@ -71,7 +71,7 @@ namespace BombsAway
                 BurnUntil = Time.time + Mathf.Max(1f, Config.SmokeShellBurnTime),
             };
 
-            float delay = Heard(at);
+            float delay = Sfx.Delay(at);
             Sfx.Play("SmokeIgnite", at, null, 1f, delay);
             c.Hiss = Sfx.Play("SmokeHissLoop", root.transform.position, root.transform);
             _live.Add(c);
@@ -102,13 +102,6 @@ namespace BombsAway
         {
             foreach (var c in _live) if (c.Root != null) Object.Destroy(c.Root);
             _live.Clear();
-        }
-
-        /// <summary>Seconds a sound from <paramref name="at"/> takes to reach the camera.</summary>
-        internal static float Heard(Vector3 at)
-        {
-            var cam = Camera.main;
-            return cam != null ? Vector3.Distance(cam.transform.position, at) / 343f : 0f;
         }
     }
 
@@ -195,7 +188,7 @@ namespace BombsAway
             f.Trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             // The pop of the round opening, late by the distance; then the candle's hiss.
-            var pop = Sfx.Play("ArtyGuns", at, null, 0.6f, SmokeShells.Heard(at));
+            var pop = Sfx.Play("ArtyGuns", at, null, 0.6f, Sfx.Delay(at));
             if (pop != null) pop.pitch *= 2.2f;
             f.Hiss = Sfx.Play("SmokeHissLoop", f.Candle.position, f.Candle);
             if (f.Hiss != null) f.Hiss.pitch *= 1.35f;
@@ -271,13 +264,8 @@ namespace BombsAway
             return true;
         }
 
-        private static bool Ground(Vector3 from, float reach)
-        {
-            int mask = Config.WorldLayerMask & ~(1 << 2);
-            var hits = Physics.RaycastAll(from + Vector3.up * 0.1f, Vector3.down, reach + 0.1f, mask, QueryTriggerInteraction.Ignore);
-            foreach (var h in hits) if (h.collider != null) return true;
-            return false;
-        }
+        private static bool Ground(Vector3 from, float reach) =>
+            FireMission.PathHit(from + Vector3.up * 0.1f, Vector3.down, reach + 0.1f, out _, out _);
 
         private static void Drop(Flare f)
         {

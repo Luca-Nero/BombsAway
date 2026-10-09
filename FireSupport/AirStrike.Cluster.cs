@@ -19,11 +19,15 @@ namespace BombsAway
     /// throws come out even round it. Their fall speeds differ a little, so they land over a
     /// second or two, and go off where they first meet something: a roof (the jet goes on down
     /// into the room), a body, the ground (BombsAway.Blu97). A CbuDudRate share lie where they
-    /// land, live: one goes off when something moves it or a round hits it.
+    /// land, live: one goes off when something moves it, and is one of the chain's charges
+    /// (Explosion.Chain.cs): a round hitting it sets it off (ShootToDetonate), and so does a
+    /// blast or fragment from a nearby explosion (ChainReactions). With ChainReactions off a
+    /// blast's shove doesn't count either: it settles again after one.
     /// </summary>
     internal static partial class AirStrike
     {
         private const float BombletTau = 0.6f;    // s: the decelerator's braking, as exp(-t / tau)
+        private const float DudSettle = 1.5f;     // s a dud lies still before moving it counts
 
         private sealed class Bomblet
         {
@@ -50,7 +54,8 @@ namespace BombsAway
             public void Shift(float t0) { OpenAt += t0; FirstLand += t0; LastLand += t0; }
         }
 
-        private sealed class Dud
+        /// <summary>A live BLU-97 dud lying where it landed (one of the chain's charges).</summary>
+        internal sealed class Dud
         {
             public GameObject Go;
             public Rigidbody Rb;
@@ -199,9 +204,7 @@ namespace BombsAway
             DestroyBody(b);
             // The case splits along its length with a sharp crack, and the bomblets fly out.
             try { ExplosionFx.Play("CbuOpen", c.Open, c.OpenVel.normalized, false, default); } catch { }
-            var cam = Camera.main;
-            float delay = cam != null ? Vector3.Distance(cam.transform.position, c.Open) / SpeedOfSound : 0f;
-            Sfx.Play("CbuOpen", c.Open, null, 1f, delay);
+            Sfx.Play("CbuOpen", c.Open, null, 1f, Sfx.Delay(c.Open));
             foreach (var m in c.Bomblets) m.Body = BuildBomblet();
             if (Config.Dbg1) MelonLogger.Msg($"[Air] CBU-87 open at {c.Open} ({c.Open.y - s.Mark.y:F0} m over the mark), {c.Bomblets.Count} bomblets, landing in {c.FirstLand - now:F1}-{c.LastLand - now:F1}s");
         }
@@ -227,9 +230,12 @@ namespace BombsAway
             if (!_bomblets.Exists(q => q.From == c)) LogCluster(c);
         }
 
-        private static void LogCluster(Cluster c) =>
-            MelonLogger.Msg($"[Air] CBU-87: {c.Bursts} bomblets went off, {c.Duds} duds lie live; FruitLib {c.FruitMs:F0} ms in all, " +
-                            $"{c.WorstMs:F0} ms in the worst frame ({Mathf.Max(1, Config.CbuBurstsPerFrame)} a frame at most), {c.Walks} wound walks");
+        private static void LogCluster(Cluster c)
+        {
+            if (Config.Dbg1)
+                MelonLogger.Msg($"[Air] CBU-87: {c.Bursts} bomblets went off, {c.Duds} duds lie live; FruitLib {c.FruitMs:F0} ms in all, " +
+                                $"{c.WorstMs:F0} ms in the worst frame ({Mathf.Max(1, Config.CbuBurstsPerFrame)} a frame at most), {c.Walks} wound walks");
+        }
 
         /// <summary>
         /// Every frame: up to CbuBurstsPerFrame bomblets go off, oldest first, and the live duds
@@ -299,25 +305,46 @@ namespace BombsAway
             _duds.Add(new Dud { Go = go, Rb = rb, Col = box, Born = Time.time });
         }
 
-        /// <summary>A round hit something: if it was a dud, it goes off on the next frame (FruitLib is mid-step).</summary>
+        /// <summary>A round hit something: if it was a dud, it goes off on the next frame (FruitLib is mid-step). Only with ShootToDetonate.</summary>
         private static bool DudHit(Collider col)
         {
-            if (col == null || _duds.Count == 0) return false;
+            if (col == null || _duds.Count == 0 || !Config.ShootToDetonate) return false;
             foreach (var d in _duds)
                 if (d.Col != null && d.Col.Pointer == col.Pointer) { d.Set = true; return true; }
             return false;
+        }
+
+        /// <summary>The live duds, for the chain (Explosion.Chain.cs).</summary>
+        internal static List<Dud> LiveDuds => _duds;
+
+        /// <summary>Where a dud is, if it is still there.</summary>
+        internal static bool DudAt(Dud d, out Vector3 at)
+        {
+            at = default;
+            if (d == null || d.Go == null) return false;
+            at = d.Col != null ? d.Col.bounds.center : d.Go.transform.position;
+            return true;
+        }
+
+        /// <summary>The chain set it off: it goes with the cluster's bursts.</summary>
+        internal static void SetOff(Dud d)
+        {
+            if (d != null && d.Go != null) d.Set = true;
         }
 
         private static void TickDuds()
         {
             if (_duds.Count == 0) return;
             float now = Time.time, sense = Mathf.Max(0.2f, Config.CbuDudSensitivity);
+            // Without chain reactions an explosion doesn't set it off by shoving it either.
+            bool shoved = !Config.ChainReactions && now - ExplosionSystem.LastBlastAt < DudSettle;
             for (int i = _duds.Count - 1; i >= 0; i--)
             {
                 var d = _duds[i];
                 if (d.Go == null) { _duds.RemoveAt(i); continue; }
-                // Settled first: the drop that laid it doesn't count.
-                bool moved = now - d.Born > 1.5f && d.Rb != null && d.Rb.linearVelocity.magnitude > sense;
+                // Settled first: the drop that laid it doesn't count, nor (above) a blast's shove.
+                if (shoved) d.Born = now;
+                bool moved = now - d.Born > DudSettle && d.Rb != null && d.Rb.linearVelocity.magnitude > sense;
                 if (!d.Set && !moved) continue;
                 Vector3 at = d.Go.transform.position, axis = d.Go.transform.forward;
                 Object.Destroy(d.Go);

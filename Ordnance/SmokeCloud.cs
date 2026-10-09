@@ -213,27 +213,8 @@ namespace BombsAway
         private static int SmokeLayer()
         {
             if (_layer != -2) return _layer;
-            _layer = -1;
-            try
-            {
-                int l = FreeLayers.Take("Smoke");
-                if (l < 0) { MelonLogger.Warning("[Smoke] no free layer: thermal sights see the smoke."); return -1; }
-                var asset = UnityEngine.Rendering.Universal.UniversalRenderPipeline.asset;
-                var list = asset != null ? asset.m_RendererDataList : null;
-                if (list != null)
-                    foreach (var d in list)
-                    {
-                        var u = d != null ? d.TryCast<UnityEngine.Rendering.Universal.UniversalRendererData>() : null;
-                        if (u != null && (u.transparentLayerMask.value & (1 << l)) == 0)
-                        {
-                            MelonLogger.Warning($"[Smoke] the renderer doesn't draw transparent layer {l}: thermal sights see the smoke.");
-                            return -1;
-                        }
-                    }
-                _layer = l;
-                if (Config.Dbg1) MelonLogger.Msg($"[Smoke] boxes on layer {l}.");
-            }
-            catch (System.Exception e) { MelonLogger.Warning($"[Smoke] picking a layer failed ({e.Message}): thermal sights see the smoke."); }
+            _layer = FreeLayers.TakeTransparent("Smoke", "thermal sights see the smoke");
+            if (Config.Dbg1 && _layer >= 0) MelonLogger.Msg($"[Smoke] boxes on layer {_layer}.");
             return _layer;
         }
 

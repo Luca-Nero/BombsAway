@@ -7,12 +7,30 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace BombsAway
 {
+    /// <summary>What the rangefinder shows this frame.</summary>
+    internal struct LrfState
+    {
+        public bool Lasing;
+        public float Progress;       // 0..1 toward a fix
+        public bool OffMark;         // the reticle has wandered off the lased point: the fill pauses
+        public Vector3 LasePoint;    // the point being lased
+        public bool NoReturn;        // lasing at nothing
+        public bool HasReading;      // a range to show (lasing now, or the last fix)
+        public float Range, AzimuthMils, ElevationMils;
+        public string MissionLine;   // under the strip: "155MM HE  6 RDS"
+        public int MissionIndex;     // the chosen slot on the strip (FireMission.CodeAt)
+        public float ZoomLevel;      // the chosen magnification (the screen shows "7X")
+        public bool HasMark;
+        public Vector3 Mark;
+        public string MarkStatus;    // "MSN 01 SPLASH 07"
+    }
+
     /// <summary>
     /// The rangefinder's screen on the held binoculars, built the way the Javelin's CLU is
     /// (Missile/JavelinClu.cs): a camera at the receiver lens (Window) renders the zoomed view
     /// into a 640x480 RenderTexture on the Display face, and a 320x240 pixel-drawn HUD sits on
     /// the Hud face over it: mil reticle, the mission strip, LED readout, the lase's segments
-    /// and the mission status, in the red LED of the old eyepiece overlay. The strip along the
+    /// and the mission status, in red LED. The strip along the
     /// top is the game's own toolbar in LED: one slot per mission type, the chosen one lit
     /// solid, Q and E either side (the pressed one flashes), a tick under any type in the air,
     /// and the chosen type's name under it, retyped at a DOS cursor on every switch like the
@@ -48,7 +66,7 @@ namespace BombsAway
         private float _nextIdleFrame;
         private string _typedLine;                                // the mission line being typed, and since when
         private float _typedAt = -10f;
-        private readonly Color32[] _px = new Color32[W * H];
+        private readonly PixelCanvas _cv = new PixelCanvas(W, H);
 
         /// <summary>The screen's camera: what the reticle is on (the lase rays from here).</summary>
         public Camera Feed => _cam;
@@ -87,14 +105,14 @@ namespace BombsAway
 
             var dr = display.GetComponent<Renderer>();
             _displayMat = new Material(dr.sharedMaterial) { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            SetTex(_displayMat, _rt);
+            PixelCanvas.SetTex(_displayMat, _rt);
             _displayMat.SetVector("_FeedSize", new Vector4(FeedW, FeedH, 0f, 0f));
             dr.sharedMaterial = _displayMat;
 
-            _hud = NewTex(W, H);
+            _hud = PixelCanvas.NewTexture(W, H);
             var hr = hud.GetComponent<Renderer>();
             _hudMat = new Material(hr.sharedMaterial) { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            SetTex(_hudMat, _hud);
+            PixelCanvas.SetTex(_hudMat, _hud);
             hr.sharedMaterial = _hudMat;
             var hb = hud.GetComponent<MeshFilter>().sharedMesh.bounds;
             _hudW = hb.size.x; _hudH = hb.size.y;
@@ -106,18 +124,9 @@ namespace BombsAway
             _diamond = MarkerQuad(hud, "Diamond", _diamondTex, 11, out _diamondMat, out _diamondMesh);
         }
 
-        private static Texture2D NewTex(int w, int h) => new Texture2D(w, h, TextureFormat.RGBA32, false)
-            { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontUnloadUnusedAsset };
-
-        private static void SetTex(Material m, Texture t)
-        {
-            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", t);
-            m.mainTexture = t;
-        }
-
         private static Texture2D Marker(int n, Func<int, int, bool> lit)
         {
-            var t = NewTex(n, n);
+            var t = PixelCanvas.NewTexture(n, n);
             var px = new Color32[n * n];
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
@@ -131,13 +140,9 @@ namespace BombsAway
         private Transform MarkerQuad(Transform hud, string name, Texture2D tex, int n, out Material mat, out Mesh mesh)
         {
             mat = new Material(_hudMat) { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            SetTex(mat, tex);
+            PixelCanvas.SetTex(mat, tex);
             float s = n / (float)W * _hudW * 0.5f;
-            mesh = new Mesh { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            mesh.SetVertices(new[] { new Vector3(-s, -s, 0), new Vector3(s, -s, 0), new Vector3(s, s, 0), new Vector3(-s, s, 0) });
-            mesh.SetUVs(0, new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
-            mesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
-            mesh.RecalculateBounds();
+            mesh = PixelCanvas.Quad(s, s);
             var go = new GameObject(name);
             go.layer = hud.gameObject.layer;
             go.transform.SetParent(hud, false);
@@ -234,7 +239,7 @@ namespace BombsAway
             // The frame: black round the picture, rounded corners.
             for (int y = 0; y < H; y++)
                 for (int x = 0; x < W; x++)
-                    Put(x, y, InPicture(x, y) ? Clear : Frame);
+                    _cv.Put(x, y, InPicture(x, y) ? Clear : Frame);
 
             // Mils to HUD pixels at the feed's field of view.
             float tanHalf = Mathf.Tan(_cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
@@ -243,27 +248,27 @@ namespace BombsAway
 
             // The reticle: an open aiming box and a scale every 10 mils across and below.
             int box = Mathf.Max(3, Mil(2.5f));
-            Outline(cx - box, cy - box, 2 * box + 1, 2 * box + 1, Led);
+            _cv.Outline(cx - box, cy - box, 2 * box + 1, 2 * box + 1, Led);
             for (int m = 10; m <= 50; m += 10)
             {
                 int d = Mil(m), len = m % 50 == 0 ? 5 : 3;
                 for (int i = -len / 2; i <= len / 2; i++)
                 {
-                    Put(cx + d, cy + i, Led); Put(cx - d, cy + i, Led);
-                    if (m <= 40) Put(cx + i, cy + d, Led);
+                    _cv.Put(cx + d, cy + i, Led); _cv.Put(cx - d, cy + i, Led);
+                    if (m <= 40) _cv.Put(cx + i, cy + d, Led);
                 }
             }
             int ten = Mil(10f);
-            for (int x = box + 3; x <= ten - 3; x++) { Put(cx + x, cy, Dim); Put(cx - x, cy, Dim); }
+            for (int x = box + 3; x <= ten - 3; x++) { _cv.Put(cx + x, cy, Dim); _cv.Put(cx - x, cy, Dim); }
 
             // The mission strip, top; the zoom, top left; the readout, bottom; under it the lase
             // or the mission's status.
             DrawStrip(s, cx);
             string zoom = $"{s.ZoomLevel:0.#}X";
-            TextCentred(zoom, Border + 10 + (zoom.Length * (PixelFont.GW + 1) - 1) / 2, StripY + 2, Led);   // top left
+            _cv.TextCentred(zoom, Border + 10 + PixelCanvas.Width(zoom) / 2, StripY + 2, Led);   // top left
             int bottom = H - 44;
             string line = s.NoReturn ? ((Time.unscaledTime * 3f % 1f) < 0.6f ? "NO RETURN" : "") : Readout(s);
-            TextCentred(line, cx, bottom, Led);
+            _cv.TextCentred(line, cx, bottom, Led);
 
             bool blink = (Time.unscaledTime * 4f % 1f) < 0.6f;
             if (s.Lasing && !s.NoReturn)
@@ -272,15 +277,14 @@ namespace BombsAway
                 int total = Segs * SegW + (Segs - 1) * Gap, x0 = cx - total / 2, y0 = bottom + 11;
                 int lit = Mathf.FloorToInt(s.Progress * Segs);
                 for (int i = 0; i < Segs; i++)
-                    Fill(x0 + i * (SegW + Gap), y0, SegW, 3, i < lit && (!s.OffMark || blink) ? Led : Dim);
-                if (s.OffMark) TextCentred("ON TGT", cx, y0 + 7, blink ? Led : Dim);
-                else if (blink) TextCentred("LASING", cx, y0 + 7, Led);
+                    _cv.Fill(x0 + i * (SegW + Gap), y0, SegW, 3, i < lit && (!s.OffMark || blink) ? Led : Dim);
+                if (s.OffMark) _cv.TextCentred("ON TGT", cx, y0 + 7, blink ? Led : Dim);
+                else if (blink) _cv.TextCentred("LASING", cx, y0 + 7, Led);
             }
             else if (s.MarkStatus != null)
-                TextCentred(s.MarkStatus, cx, bottom + 13, Led);
+                _cv.TextCentred(s.MarkStatus, cx, bottom + 13, Led);
 
-            _hud.SetPixels32(_px);
-            _hud.Apply(false);
+            _cv.Upload(_hud);
         }
 
         /// <summary>Characters of the mission line typed so far (all of it once done).</summary>
@@ -337,35 +341,35 @@ namespace BombsAway
                 string code = FireMission.CodeAt(i);
                 if (i == s.MissionIndex)
                 {
-                    Fill(x, StripY, sw, SlotH, Led);
-                    TextCentred(code, x + sw / 2 + 1, StripY + 2, Frame);
+                    _cv.Fill(x, StripY, sw, SlotH, Led);
+                    _cv.TextCentred(code, x + sw / 2 + 1, StripY + 2, Frame);
                 }
                 else
                 {
-                    Outline(x, StripY, sw, SlotH, Dim);
-                    TextCentred(code, x + sw / 2 + 1, StripY + 2, Dim);
+                    _cv.Outline(x, StripY, sw, SlotH, Dim);
+                    _cv.TextCentred(code, x + sw / 2 + 1, StripY + 2, Dim);
                 }
                 // A mission of this type in the air: a lit tick under its slot.
-                if (FireMission.Running(FireMission.TypeAt(i))) Fill(x + sw / 2 - 2, StripY + SlotH + 1, 5, 1, Led);
+                if (FireMission.Running(FireMission.TypeAt(i))) _cv.Fill(x + sw / 2 - 2, StripY + SlotH + 1, 5, 1, Led);
             }
 
             // The pages, a row of tabs centred over the strip whatever its width.
             int tabs = (FireMission.PageCount - 1) * TabGap;
-            for (int pg = 0; pg < FireMission.PageCount; pg++) tabs += FireMission.PageName(pg).Length * (PixelFont.GW + 1) - 1;
+            for (int pg = 0; pg < FireMission.PageCount; pg++) tabs += PixelCanvas.Width(FireMission.PageName(pg));
             for (int pg = 0, x = cx - tabs / 2; pg < FireMission.PageCount; pg++)
             {
                 string name = FireMission.PageName(pg);
-                int w = name.Length * (PixelFont.GW + 1) - 1;
-                TextAt(name, x, TabY, pg == page ? Led : Dim);
-                if (pg != page && PageRunning(pg)) Fill(x + w / 2 - 2, TabY + PixelFont.GH + 1, 5, 1, Led);
+                int w = PixelCanvas.Width(name);
+                _cv.Text(name, x, TabY, pg == page ? Led : Dim);
+                if (pg != page && PageRunning(pg)) _cv.Fill(x + w / 2 - 2, TabY + PixelFont.GH + 1, 5, 1, Led);
                 x += w + TabGap;
             }
 
             bool lit = Time.unscaledTime - FireMission.SwitchedAt < KeyFlash;
             string prev = KeyLabel(Config.MissionPrevKey, "<"), next = KeyLabel(Config.MissionNextKey, ">");
-            int pw = prev.Length * (PixelFont.GW + 1) - 1, nw = next.Length * (PixelFont.GW + 1) - 1;
-            TextCentred(prev, x0 - 6 - (pw + 1) / 2, StripY + 2, lit && FireMission.SwitchedDir < 0 ? Led : Dim);
-            TextCentred(next, x0 + total + 6 + nw / 2, StripY + 2, lit && FireMission.SwitchedDir > 0 ? Led : Dim);
+            int pw = PixelCanvas.Width(prev), nw = PixelCanvas.Width(next);
+            _cv.TextCentred(prev, x0 - 6 - (pw + 1) / 2, StripY + 2, lit && FireMission.SwitchedDir < 0 ? Led : Dim);
+            _cv.TextCentred(next, x0 + total + 6 + nw / 2, StripY + 2, lit && FireMission.SwitchedDir > 0 ? Led : Dim);
 
             // The chosen type under the strip, retyped at a cursor after a switch.
             string line = s.MissionLine ?? "";
@@ -373,11 +377,11 @@ namespace BombsAway
             if (shown < line.Length)
             {
                 // Typed from the left of where the whole line will sit, so it doesn't slide.
-                int w = line.Length * (PixelFont.GW + 1) - 1;
+                int w = PixelCanvas.Width(line);
                 string part = line.Substring(0, shown) + "_";
-                TextAt(part, cx - w / 2, StripY + SlotH + 5, Led);
+                _cv.Text(part, cx - w / 2, StripY + SlotH + 5, Led);
             }
-            else TextCentred(line, cx, StripY + SlotH + 5, Led);
+            else _cv.TextCentred(line, cx, StripY + SlotH + 5, Led);
         }
 
         private static bool InPicture(int x, int y)
@@ -387,45 +391,6 @@ namespace BombsAway
             int dx = x < x0 + Corner ? x0 + Corner - x : (x >= x1 - Corner ? x - (x1 - Corner - 1) : 0);
             int dy = y < y0 + Corner ? y0 + Corner - y : (y >= y1 - Corner ? y - (y1 - Corner - 1) : 0);
             return dx * dx + dy * dy <= Corner * Corner;
-        }
-
-        /// <summary>x, y from the top-left.</summary>
-        private void Put(int x, int y, Color32 c)
-        {
-            if (x < 0 || y < 0 || x >= W || y >= H) return;
-            _px[(H - 1 - y) * W + x] = c;
-        }
-
-        private void Fill(int x, int y, int w, int h, Color32 c)
-        {
-            for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) Put(x + i, y + j, c);
-        }
-
-        private void Outline(int x, int y, int w, int h, Color32 c)
-        {
-            for (int i = 0; i < w; i++) { Put(x + i, y, c); Put(x + i, y + h - 1, c); }
-            for (int j = 0; j < h; j++) { Put(x, y + j, c); Put(x + w - 1, y + j, c); }
-        }
-
-        private void TextCentred(string s, int cx, int y, Color32 c)
-        {
-            if (string.IsNullOrEmpty(s)) return;
-            int w = s.Length * (PixelFont.GW + 1) - 1;
-            TextAt(s, cx - w / 2, y, c);
-        }
-
-        private void TextAt(string s, int x, int y, Color32 c)
-        {
-            if (string.IsNullOrEmpty(s)) return;
-            foreach (char raw in s)
-            {
-                var g = PixelFont.Bits(char.ToUpperInvariant(raw));
-                if (g != null)
-                    for (int r = 0; r < PixelFont.GH; r++)
-                        for (int col = 0; col < PixelFont.GW; col++)
-                            if (g[r * PixelFont.GW + col] == '#') Put(x + col, y + r, c);
-                x += PixelFont.GW + 1;
-            }
         }
     }
 }

@@ -49,7 +49,8 @@ namespace BombsAway
                 ExplosionFx.Play("TBXCloud", p.Origin, fwd, hasGround, ground);
             }
             catch (System.Exception e) { MelonLogger.Warning($"[TBX] dispersal effect failed: {e.Message}"); }
-            if (Config.CamFXEnabled) CameraFX.AddKick(0.15f);
+            // The burster only pops: a small shake, coming with its sound and gone with distance.
+            CameraFX.Blast(p.Origin, p.ChargeKgTNT, 0.015f);
 
             float now = Time.time;
             _clouds.Add(new Cloud { P = p, At = at, IgniteAt = now + Mathf.Max(0f, Config.MissileTBXIgniteDelay), RushAt = -1f });

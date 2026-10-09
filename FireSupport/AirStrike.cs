@@ -15,8 +15,8 @@ namespace BombsAway
     ///   OBS: its call sign, the grid, DANGER CLOSE if the mark is near you, the attack. OVER.
     ///   It reads the grid and heading back; READBACK CORRECT. IP INBOUND; CONTINUE.
     ///   IN FROM THE WEST; CLEARED HOT. The attack. OFF NORTH. Then the end of mission.
-    /// It attacks AirTimeOnTarget after the call, along an attack heading across your line of
-    /// sight (AirAttackHeading -1), so its hits walk past you rather than toward you.
+    /// It attacks AirTimeOnTarget after the call, along an approach planned for the mark
+    /// (AirStrike.Approach.cs) that keeps its hits from walking toward you.
     ///
     /// Its whole flight is worked out at the call (Path): far off and level, a smooth pitch into
     /// the dive, the attack, then a pull-off and climbing turn away from your side. Its sounds
@@ -48,7 +48,6 @@ namespace BombsAway
     /// </summary>
     internal static partial class AirStrike
     {
-        private const float SpeedOfSound = 343f;
         private const string Fuzed = "BombsAway.Fuzed";
         private const float DiveTime = 5f;     // seconds of dive before it opens fire
         private const float Approach = 14f;    // seconds of level flight before that, coming in from far off
@@ -276,7 +275,7 @@ namespace BombsAway
             for (int i = 0; i < 28; i++)
             {
                 float mid = 0.5f * (lo + hi);
-                if (SpeedOfSound * (now - mid) > Vector3.Distance(ear, path.PosAt(mid))) lo = mid; else hi = mid;
+                if (Sfx.SpeedOfSound * (now - mid) > Vector3.Distance(ear, path.PosAt(mid))) lo = mid; else hi = mid;
             }
             return 0.5f * (lo + hi);
         }
@@ -323,7 +322,7 @@ namespace BombsAway
 
             Vector3 toEar = ear - pos;
             float closing = toEar.sqrMagnitude > 1e-4f ? path.SpeedAt(te) * Vector3.Dot(fwd, toEar.normalized) : 0f;
-            s.Src.pitch = Mathf.Clamp(s.BasePitch * SpeedOfSound / Mathf.Max(30f, SpeedOfSound - closing), 0.1f, 3f);
+            s.Src.pitch = Mathf.Clamp(s.BasePitch * Sfx.SpeedOfSound / Mathf.Max(30f, Sfx.SpeedOfSound - closing), 0.1f, 3f);
             float fade = Mathf.Min(1f, s.FadeIn > 0f ? (te - s.From) / s.FadeIn : 1f, s.FadeOut > 0f ? (s.To - te) / s.FadeOut : 1f);
             s.Src.volume = s.BaseVolume * Mathf.Clamp01(fade);
         }
@@ -389,7 +388,8 @@ namespace BombsAway
         }
 
         public static bool Running(FireMissionType t) => _strikes.Exists(s => !s.Complete && s.Type == t);
-        private static bool Busy => _strikes.Exists(s => !s.Complete);
+        /// <summary>That aircraft is still on a strike. Each airframe answers for itself, as the guns and the mortars do.</summary>
+        private static bool Busy(Airframe craft) => _strikes.Exists(s => !s.Complete && s.CraftKind == craft);
 
         /// <summary>The newest running strike's mark, if it is newer than mission <paramref name="newerThan"/>.</summary>
         public static bool TryMark(int newerThan, out Vector3 mark, out string status)
@@ -423,9 +423,9 @@ namespace BombsAway
             RegisterRounds(g);
             string grid = FireMission.Grid(mark);
             int rounds = Mathf.Max(1, Mathf.RoundToInt(g.Burst * g.Rate));
-            if (!Config.ArtyStacking && Busy)
+            if (!Config.AirStacking && Busy(g.Craft))
             {
-                if (!RefuseOnTerminal(g.Code, grid, g.Callsign, rounds, $"{g.CaliberMm:0}MM", g.Name, CraftName(g.Craft)))
+                if (!RefuseOnTerminal(g.Craft, g.Code, grid, g.Callsign, rounds, $"{g.CaliberMm:0}MM", g.Name))
                 {
                     RadioLog.Observer($"{g.Callsign}, grid {grid}. Guns. Over.");
                     RadioLog.Unit(g.Sign, "Unable, engaged. Out.");
@@ -524,36 +524,22 @@ namespace BombsAway
         }
 
         /// <summary>
-        /// A call while the air is busy, on the terminal: the program on the line (the newest
-        /// running strike's) turns it down. False when it has to go on the radio net.
+        /// A call to an aircraft that is still on a strike, on the net that strike is on: on the
+        /// terminal its program turns the new call down. False when the strike is on the radio
+        /// net (the caller says it there).
         /// </summary>
-        private static bool RefuseOnTerminal(string unit, string grid, string callsign, int count, string ammo, string weapon, string craft)
+        private static bool RefuseOnTerminal(Airframe craft, string unit, string grid, string callsign, int count, string ammo, string weapon)
         {
-            if (!Config.AirTerminal) return false;
             TermSession live = null;
-            for (int i = _strikes.Count - 1; i >= 0; i--) if (!_strikes[i].Complete) { live = _strikes[i].Term; break; }
+            for (int i = _strikes.Count - 1; i >= 0; i--)
+                if (!_strikes[i].Complete && _strikes[i].CraftKind == craft) { live = _strikes[i].Term; break; }
+            if (live == null) return false;
             var call = new Dictionary<string, string>
             {
                 ["GRID"] = grid, ["SIGN"] = callsign.ToUpperInvariant(), ["N"] = count.ToString(), ["NWORD"] = FireTerminal.Word(count),
-                ["AMMO"] = ammo.ToUpperInvariant(), ["WEAPON"] = weapon.ToUpperInvariant(), ["CRAFT"] = craft,
+                ["AMMO"] = ammo.ToUpperInvariant(), ["WEAPON"] = weapon.ToUpperInvariant(), ["CRAFT"] = CraftName(craft),
             };
             return FireTerminal.Refuse(live, unit, call);
-        }
-
-        /// <summary>The attack heading: AirAttackHeading, or across the line from you to the mark, either way round.</summary>
-        private static Vector3 AttackHeading(Vector3 mark, Vector3 observer)
-        {
-            float set = Config.AirAttackHeading;
-            float deg;
-            if (set >= 0f) deg = set;
-            else
-            {
-                Vector3 los = Vector3.ProjectOnPlane(mark - observer, Vector3.up);
-                float b = los.sqrMagnitude > 1f ? Mathf.Atan2(los.x, los.z) * Mathf.Rad2Deg : Random.Range(0f, 360f);
-                deg = b + (Random.value < 0.5f ? 90f : -90f) + Random.Range(-12f, 12f);
-            }
-            float r = deg * Mathf.Deg2Rad;
-            return new Vector3(Mathf.Sin(r), 0f, Mathf.Cos(r));
         }
 
         /// <summary>"north", "southwest": a flat direction as the net says it (+Z north, +X east).</summary>
@@ -572,7 +558,6 @@ namespace BombsAway
             FireFuzes();
             FireBomblets();
             FlushDartDust();
-            TickShakes(now);
             if (_strikes.Count == 0) return;
             var cam = Camera.main;
             for (int i = _strikes.Count - 1; i >= 0; i--)
@@ -898,11 +883,10 @@ namespace BombsAway
             foreach (var s in _strikes) Drop(s);
             _strikes.Clear();
             _fuzes.Clear();
-            _shakes.Clear();
             _dartDust.Clear();
             ClearCluster();
         }
 
-        public static void OnScene() { Clear(); _bombBearing = -1f; _lastAirAz = -1f; _dartFx = null; _dartDustPs = null; }
+        public static void OnScene() { Clear(); _lastAirAz = -1f; _dartFx = null; _dartDustPs = null; }
     }
 }

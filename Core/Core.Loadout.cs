@@ -78,8 +78,8 @@ namespace BombsAway
         private static bool Holding(Ordnance o) =>
             Equipped && Selected == o && !FruitMenu.BlocksGameplayInput;
 
-        /// <summary>RMB held with the missile out: scanning for a lock.</summary>
-        private static bool SlotScanning => Holding(Ordnance.Missile) && Input.GetMouseButton(1);
+        /// <summary>RMB held with the missile out (and all there): scanning for a lock.</summary>
+        private static bool SlotScanning => Holding(Ordnance.Missile) && Input.GetMouseButton(1) && HeldReady(Ordnance.Missile);
 
         /// <summary>The mod's own shelf in the inventory window (FruitLib adds it after the game's four).</summary>
         private const string CategoryName = "Bombs Away";
@@ -199,8 +199,6 @@ namespace BombsAway
             ResetPlacementForScene();
             BinocularView.OnScene();
             FireMission.OnScene();
-            RadioLog.Clear();
-            FireTerminal.Clear();
             _rocketReadyAt = 0f;
         }
 
@@ -211,16 +209,16 @@ namespace BombsAway
             ClearAllCharges();
             TestBench.OnScene();
             ExplosionVFX.ResetForScene();
-            ExplosionFx.Clear();
             Sfx.Clear();
-            Flashbang.Clear();
             Breeze.OnScene();
         }
 
         /// <summary>
         /// Every charge and missile in the world goes, without going off: the World menu's
         /// RESET BOMBS, and RESET MAP / RESET ALL, which put the map back in place without a
-        /// scene load - so nothing else would clear what the map no longer has room for.
+        /// scene load - so nothing else would clear what the map no longer has room for. What
+        /// they set going goes with them: missions and their radio traffic, sounds and shakes
+        /// still on their way, explosion effects, and the flashbang's stun and ringing.
         /// </summary>
         internal static void ClearAllCharges()
         {
@@ -243,9 +241,14 @@ namespace BombsAway
             _grenades.Clear();
             _missiles.Clear();
             FireMission.Clear();
+            RadioLog.Clear();
             Thermobaric.Clear();
             ClearPending();
             ClearLooseParts();
+            ExplosionFx.Clear();
+            Sfx.Stop();
+            CameraFX.Clear();
+            Flashbang.Clear();
         }
 
         private static void OnMapReset()

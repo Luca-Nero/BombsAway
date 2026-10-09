@@ -23,9 +23,6 @@ namespace BombsAway
     /// step); between equally specific ones the conversation's beats its group's beats [ALL].
     /// A step that is there but empty says nothing. A step the file has nowhere at all (one
     /// added in a later version, 5.25.0's plan and masked) comes from the built-in [ALL].
-    ///
-    /// A file that is still an earlier version's default, unedited, is replaced by this one's
-    /// (OldDefaults), so new lines arrive without anyone having to delete it.
     /// </summary>
     internal static class TerminalScript
     {
@@ -57,8 +54,6 @@ namespace BombsAway
         private static Steps _all = new Steps();
         private static Steps _builtinAll;          // the DLL's [ALL], for steps the file has nowhere
 
-        /// <summary>Fingerprints (Fingerprint) of earlier defaults: 5.20.0, and 5.22.0-5.24.0.</summary>
-        private static readonly HashSet<ulong> OldDefaults = new HashSet<ulong> { 0xe1794839a24542e3UL, 0xbc0fe25bfd3d98fdUL };
         private static DateTime _stamp;
         private static bool _loaded, _wroteWarned;
 
@@ -117,15 +112,6 @@ namespace BombsAway
             return _builtinAll;
         }
 
-        /// <summary>FNV-1a over the text with its line ends as LF and no trailing blanks.</summary>
-        private static ulong Fingerprint(string text)
-        {
-            string t = text.Replace("\r\n", "\n").TrimEnd();
-            ulong h = 0xcbf29ce484222325UL;
-            foreach (char c in t) { h ^= c; h *= 0x100000001b3UL; }
-            return h;
-        }
-
         private static IEnumerable<string> Candidates(string step, string unit, bool danger)
         {
             if (danger && !string.IsNullOrEmpty(unit)) yield return $"{step}.{unit}.danger";
@@ -178,18 +164,6 @@ namespace BombsAway
                 var stamp = File.GetLastWriteTimeUtc(path);
                 if (_loaded && stamp == _stamp) return;
                 string text = File.ReadAllText(path);
-                if (OldDefaults.Contains(Fingerprint(text)))
-                {
-                    // An earlier version's default, never edited: this version's takes its place.
-                    string def = Default();
-                    if (def != null)
-                    {
-                        FruitLib.FruitPaths.WriteAllTextAtomic(path, def);
-                        MelonLogger.Msg($"[Terminal] {FileName} was an earlier default, unedited: updated to this version's");
-                        text = def;
-                        stamp = File.GetLastWriteTimeUtc(path);
-                    }
-                }
                 _stamp = stamp;
                 Parse(text, path);
             }

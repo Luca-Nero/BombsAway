@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.26.2";
+        public const string Version = "5.28.0";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -32,7 +32,7 @@ namespace BombsAway
         public static bool PersistentLock = false;
 
         // ── FruitLib dependency ──────────────────────────────────────────────
-        // 3.1.0: the first FruitLib with FruitBallistics, which every detonation now goes through.
+        // 5.10.0: jets on full-sphere specs and the surface-burst height (the BLU-97 and the MOAB need both).
         private const int LibMajor = 5, LibMinor = 10, LibPatch = 0;
         private bool _active;
 
@@ -86,12 +86,8 @@ namespace BombsAway
         private void UpdateBody()
         {
             ExplosionDebugDraw.Tick();
-            // The debug keys (test bench, scale probe) only answer with DebugHotkeys on.
-            if (Config.DebugHotkeys)
-            {
-                TestBench.Tick(!FruitMenu.IsInputSuppressed);
-                ScaleProbe.Tick(!FruitMenu.IsInputSuppressed);
-            }
+            // The test bench's key only answers with DebugHotkeys on.
+            if (Config.DebugHotkeys) TestBench.Tick(!FruitMenu.IsInputSuppressed);
             TickChain();
             TickPlacement();
             TickHeld();
@@ -145,7 +141,7 @@ namespace BombsAway
                 if (Holding(Ordnance.C4) && Input.GetKeyDown(Config.RemoteToggleKey))
                 {
                     RemoteSequential = !RemoteSequential;
-                    MelonLogger.Msg($"[Remote] Mode: {(RemoteSequential ? "SEQUENTIAL (oldest first)" : "SIMULTANEOUS (all at once)")}");
+                    if (Config.Dbg1) MelonLogger.Msg($"[Remote] Mode: {(RemoteSequential ? "SEQUENTIAL (oldest first)" : "SIMULTANEOUS (all at once)")}");
                 }
 
                 // ── Seeker: RMB (the launcher up) tracks, locking after LockTime (Missile/Seeker.cs) ──
@@ -153,34 +149,7 @@ namespace BombsAway
                 if (Holding(Ordnance.Missile)) TickSeeker(Time.deltaTime, SlotScanning);
                 else ClearCandidate();
 
-                // The brackets belong to the launcher: with anything else in hand they are hidden,
-                // but the lock itself is kept (PersistentLock), so taking it out again shows it.
-                // With the CLU in hand its track gates do this job, so they stay hidden too.
-                if (!Holding(Ordnance.Missile) || _clu != null)
-                {
-                    HideLockIndicator();
-                    HideFocusIndicator();
-                }
-                else
-                {
-                    if (_lockedTarget != null)       UpdateLockIndicator(_lockedTarget, true);
-                    else if (_focusedTarget != null) UpdateLockIndicator(_focusedTarget, false);
-                    else                             HideLockIndicator();
-
-                    // Secondary (focus) bracket — shown when re-locking with an existing lock
-                    if (_lockedTarget != null && _focusedTarget != null && _focusedTarget != _lockedTarget)
-                        UpdateFocusIndicator(_focusedTarget);
-                    else
-                        HideFocusIndicator();
-                }
-
                 ProcessRemoteDetonation();
-            }
-            else
-            {
-                // A menu is open, so the whole input block is skipped: hide the brackets here.
-                HideLockIndicator();
-                HideFocusIndicator();
             }
 
             // ── Main ordnance tick —─────—─────—─────—─────—─────—─────—─────—─────
@@ -239,6 +208,8 @@ namespace BombsAway
         {
             Rigidbody launchTarget = _lockedTarget;
             if (launchTarget == null) return;
+            // A persistent lock outlives putting the launcher away: not from one still spawning in.
+            if (!HeldReady(Ordnance.Missile)) return;
             // One missile per lock, unless the lock is persistent: this one's is still flying.
             if (LockPinned && !PersistentLock) return;
 
@@ -255,8 +226,6 @@ namespace BombsAway
             var m = SpawnMissile(launchTarget, _lockedBody);
             if (m != null) _lockMissile = m;
             ClearCandidate();
-            HideLockIndicator();
-            HideFocusIndicator();
         }
 
         /// <summary>RMB with C4 in hand: oldest armed charge (FIFO) or all of them (SIMULTANEOUS).</summary>
@@ -294,7 +263,6 @@ namespace BombsAway
             if (!_active) return;
             DrawFireSupport();
             Flashbang.DrawOverlay();
-            Flashbang.DrawDiagnostics();
         }
 
         public override void OnLateUpdate()

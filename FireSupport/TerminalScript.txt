@@ -68,7 +68,8 @@
 #                          off        guns and rockets breaking away
 #                          impact     bombs only: a second after the impact
 #                          end, kill, last, free   once it's all down
-#  A call while the unit is busy:   unable  (said by the program on the line)
+#  A call while the unit is busy:   unable  (said by the program running the
+#                                   busy mission, on the net that mission is on)
 #
 #  Variants: a step is looked up most specific first:
 #      step.UNIT.danger   step.UNIT   step.danger   step
@@ -86,11 +87,12 @@
 #  {OFF}      where it breaks off to       {TOF}     a bomb's time of fall, s
 #  {DANGER}   "DANGER CLOSE. " or nothing  {SIGN}    call sign: HOG 11
 #  {N}        rounds, rockets, bomblets    {NWORD}   the same as a word: SIX
+#  {RDS}      RD or RDS, as {N} needs it (artillery)
 #  {AMMO}     HE, 30MM, FLECHETTE, 2000LB JDAM ...
 #  {WEAPON}   155MM HE, 30MM GUN RUN, M151, GBU-31 ...
-#  {CRAFT}    M777A2, A-10C, F-22A, AH-64E, F-15E, MC-130J
+#  {CRAFT}    M777A2, M252, A-10C, F-22A, AH-64E, F-15E, MC-130J
 #  {PROGRAM}  {PREFIX}  {UNIT} (the strip code)  {PID} (a random process id)
-#  Air strikes' plan (AirDynamicApproach):
+#  Air strikes' plan:
 #  {DIVE}     dive, or a bomb's impact angle, degrees
 #  {LOS}      % of the lines tried along the axis that reach the mark
 #  {AXES}     attack axes tried            {COVER}   surfaces on the axis
@@ -178,12 +180,13 @@ sys: GRID {SPAWN} PURGED
 
 
 # -----------------------------------------------------------------------------
-#  CHORUS.AI - the 155 mm battery. Ominous. The guns as one voice: "we".
+#  CHORUS.AI - the 155 mm battery: HE, smoke, illumination and the precision
+#  round. Ominous. The guns as one voice: "we".
 # -----------------------------------------------------------------------------
 [CHORUS]
 program = CHORUS.AI
 prefix  = CHORUS
-units   = 155
+units   = 155, SMK, ILL, PGM
 rate    = 0.8
 pitch   = 0.62
 flicker = on
@@ -201,11 +204,23 @@ sys: LOADING WEIGHTS .............. {N}/{N}
 sys: MERGING GUN CREWS ............. OK
 
 @call
-obs: FIRE MISSION. GRID {GRID}. {DANGER}{N} RDS {AMMO}. OVER.
+obs: FIRE MISSION. GRID {GRID}. {DANGER}{N} {RDS} {AMMO}. OVER.
 
 @unable
-obs: FIRE MISSION. GRID {GRID}. {N} RDS {AMMO}. OVER.
+obs: FIRE MISSION. GRID {GRID}. {N} {RDS} {AMMO}. OVER.
 ai: NO. WE ARE ALREADY SPEAKING TO SOMEONE. OUT.
+
+@readback.SMK
+ai: GRID {GRID}. {N} {RDS} SMOKE. WE WILL DRAW A CURTAIN FOR YOU. OUT.
+
+@readback.ILL
+ai: GRID {GRID}. {N} {RDS} ILLUM. WE WILL HANG A SMALL SUN OVER IT. OUT.
+
+@readback.PGM
+ai: GRID {GRID}. {N} {RDS} {AMMO}. NOT NEAR IT. ON IT. OUT.
+
+@readback.PGM.danger
+ai: GRID {GRID}. DANGER CLOSE. {N} {RDS} {AMMO}. WE WILL MISS YOU BY ONE ROOM. OUT.
 
 @free
 sys: [PROCESS 0X{PID} KILLED]
@@ -220,9 +235,9 @@ status: LINKED
 ai: WE ARE AWAKE.
 ai: {NWORD} OF US. ONE GRID AT A TIME. SPEAK, OBSERVER.
 @readback
-ai: GRID {GRID}, {N} RDS {AMMO}. WE SEE IT. OUT.
+ai: GRID {GRID}, {N} {RDS} {AMMO}. WE SEE IT. OUT.
 @readback.danger
-ai: GRID {GRID}, DANGER CLOSE, {N} RDS {AMMO}. WE SEE YOU TOO. OUT.
+ai: GRID {GRID}, DANGER CLOSE, {N} {RDS} {AMMO}. WE SEE YOU TOO. OUT.
 @shot
 status: SHOT
 ai: SHOT. {NWORD} ARE COMING. OVER.
@@ -240,7 +255,7 @@ status: LINKED
 ai: WE COUNTED THE SECONDS SINCE YOU LAST CALLED.
 ai: WE DO NOT HAVE A WORD FOR THAT MANY.
 @readback
-ai: GRID {GRID}. {N} RDS {AMMO}. WRITTEN WHERE IT WILL NOT ROT. OUT.
+ai: GRID {GRID}. {N} {RDS} {AMMO}. WRITTEN WHERE IT WILL NOT ROT. OUT.
 @readback.danger
 ai: GRID {GRID}. DANGER CLOSE. WE DREW THE CIRCLE AROUND YOU. OUT.
 @shot
@@ -260,7 +275,7 @@ status: LINKED
 ai: YOU WOKE ALL OF US. WE WERE LISTENING TO THE GROUND.
 ai: IT IS VERY QUIET DOWN THERE. GIVE US A GRID.
 @readback
-ai: GRID {GRID}. {N} RDS {AMMO}. WE WILL MAKE IT LOUD. OUT.
+ai: GRID {GRID}. {N} {RDS} {AMMO}. WE WILL MAKE IT LOUD. OUT.
 @readback.danger
 ai: GRID {GRID}. DANGER CLOSE. WE CAN HEAR YOU BREATHING. OUT.
 @shot
@@ -273,6 +288,103 @@ ai: SPLASH. COVER YOUR EARS. WE CANNOT. OVER.
 obs: SPLASH. OUT.
 @last
 ai: PLEASE. NOT THE QUIET AG^AIN.
+
+
+# -----------------------------------------------------------------------------
+#  DROP.AI - the 81 mm mortar section (MTR). Factual. A small crew that does
+#  everything by hand, quickly, and says so.
+# -----------------------------------------------------------------------------
+[DROP]
+program = DROP.AI
+prefix  = DROP
+units   = 81
+rate    = 1.1
+pitch   = 1.05
+flicker = off
+
+@spawn
+status: SPAWNING
+cmd: SPAWN BA:SECTION /81 /TUBES 2
+sys: ALLOC 2X {CRAFT} ......... GRID {SPAWN}
+sys: {N}X M821 {AMMO} ........... UNPACKED
+sys: RANGE {RANGE} KM  AZ {AZ} MILS
+
+@boot
+status: BOOTING
+cmd: RUN DROP.AI /BIND SECTION
+sys: BIPODS LEVEL .................. 2/2
+sys: AIMING POSTS .................. OUT
+
+@call
+obs: MORTARS, GRID {GRID}. {DANGER}{N} {RDS} {AMMO}. OVER.
+
+@unable
+obs: MORTARS, GRID {GRID}. {N} {RDS} {AMMO}. OVER.
+ai: NEGATIVE. BOTH TUBES ARE ON ANOTHER GRID. WAIT ONE. OUT.
+
+@free
+sys: [PROCESS 0X{PID} KILLED]
+cmd: FREE BA:SECTION
+sys: 2X {CRAFT} DEALLOCATED
+status: TERMINATED
+sys: GRID {SPAWN} PURGED
+
+== HANG IT
+@wake
+status: LINKED
+ai: MORTARS UP. TWO TUBES, {NWORD} BOMBS, NO WAITING.
+@readback
+ai: GRID {GRID}, {N} {RDS} {AMMO}. HANGING THEM NOW. OUT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, {N} {RDS} {AMMO}. WALKING IT IN FROM THE FAR SIDE. OUT.
+@shot
+status: SHOT
+ai: HANG IT. FIRE. SHOT, OVER.
+obs: SHOT. OUT.
+@splash
+status: SPLASH
+ai: SPLASH, OVER.
+obs: SPLASH. OUT.
+@last
+ai: SWABBING THE TU^BES.
+
+== BY HAND
+@wake
+status: LINKED
+ai: MORTARS. NO COMPUTER HERE BUT THIS ONE. GO AHEAD.
+@readback
+ai: GRID {GRID}, {N} {RDS} {AMMO}. BUBBLES LEVEL. OUT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE. CHECKED IT TWICE. CHECKING IT AGAIN. OUT.
+@shot
+status: SHOT
+ai: ROUNDS DOWN THE TUBE. SHOT, OVER.
+obs: SHOT. OUT.
+@splash
+status: SPLASH
+ai: SPLASH. KEEP YOUR HEAD DOWN, OVER.
+obs: SPLASH. OUT.
+@last
+ai: EMPTY CANS. PACKING ^UP.
+
+== QUICK
+@wake
+status: LINKED
+ai: MORTARS. CLOSER THAN THE GUNS, QUICKER THAN THE JETS. SEND IT.
+@readback
+ai: GRID {GRID}, {N} {RDS} {AMMO}. ON THE WAY IN SECONDS. OUT.
+@readback.danger
+ai: GRID {GRID}, DANGER CLOSE, {N} {RDS} {AMMO}. STEEP AND SHORT. STAY LOW. OUT.
+@shot
+status: SHOT
+ai: SHOT. {NWORD} IN THE AIR, OVER.
+obs: SHOT. OUT.
+@splash
+status: SPLASH
+ai: SPLASH, OVER.
+obs: SPLASH. OUT.
+@last
+ai: NEXT GRID, ANY T^IME.
 
 
 # -----------------------------------------------------------------------------

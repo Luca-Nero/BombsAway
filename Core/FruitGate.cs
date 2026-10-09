@@ -52,6 +52,7 @@ namespace BombsAway
             return null;
         }
 
+        /// <summary>FruitVersion.Current, which every FruitLib from 5.10.0 (the oldest this mod accepts) has; null without it.</summary>
         private static string ReadVersion(Assembly lib)
         {
             try
@@ -61,21 +62,6 @@ namespace BombsAway
                 if (p?.GetValue(null) is string s && s.Length > 0) return s;
             }
             catch { }
-
-            try
-            {
-                var info = lib.GetCustomAttribute<MelonInfoAttribute>();
-                if (!string.IsNullOrEmpty(info?.Version)) return info.Version;
-            }
-            catch { }
-
-            try
-            {
-                var v = lib.GetName().Version;
-                if (v != null) return v.Major + "." + v.Minor + "." + v.Build;
-            }
-            catch { }
-
             return null;
         }
 

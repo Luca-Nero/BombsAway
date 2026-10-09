@@ -26,6 +26,16 @@ namespace BombsAway
     {
         private const float PitchJitter = 0.05f;
 
+        /// <summary>m/s: how late a far bang is heard, the aircraft's and shells' doppler, a shock front's slowest.</summary>
+        public const float SpeedOfSound = 343f;
+
+        /// <summary>Seconds a sound from <paramref name="at"/> takes to reach the camera (0 without one).</summary>
+        public static float Delay(Vector3 at)
+        {
+            var cam = Camera.main;
+            return cam != null ? Vector3.Distance(cam.transform.position, at) / SpeedOfSound : 0f;
+        }
+
         private static Dictionary<string, List<GameObject>> _variants, _layers;
         private static bool _loadTried;
         private static AudioMixerGroup _bus;
@@ -113,11 +123,18 @@ namespace BombsAway
             }
         }
 
-        public static void Clear()
+        /// <summary>RESET BOMBS: every sound playing or still on its way stops.</summary>
+        public static void Stop()
         {
             foreach (var l in _live) if (l.Go != null) Object.Destroy(l.Go);
             _live.Clear();
             _pending.Clear();
+        }
+
+        /// <summary>Scene changes: as Stop, and the bus is looked up again.</summary>
+        public static void Clear()
+        {
+            Stop();
             _bus = null; _busTried = false;   // the next scene has its own bus handler
         }
 

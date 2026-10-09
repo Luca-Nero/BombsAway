@@ -59,7 +59,7 @@ namespace BombsAway
         private Material _mat;
         private Texture2D _tex;
         private Mesh _mesh;
-        private readonly Color32[] _px = new Color32[W * H];
+        private readonly PixelCanvas _cv = new PixelCanvas(W, H, 4);   // text cut 4 px short of the right edge
         private readonly List<(string text, Color32 c)> _rows = new List<(string text, Color32 c)>();   // Draw's log rows
         private long? _drawnKey;
         private bool _warned;
@@ -231,19 +231,13 @@ namespace BombsAway
                 return false;
             }
 
-            _tex = new Texture2D(W, H, TextureFormat.RGBA32, false)
-                { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontUnloadUnusedAsset };
+            _tex = PixelCanvas.NewTexture(W, H);
             _mat = new Material(src) { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            if (_mat.HasProperty("_BaseMap")) _mat.SetTexture("_BaseMap", _tex);
-            _mat.mainTexture = _tex;
+            PixelCanvas.SetTex(_mat, _tex);
 
             // A quad SmokeTermWidth wide, the texture's aspect, centred on its origin, facing -Z.
-            float hw = Mathf.Max(0.02f, Config.SmokeTermWidth) * 0.5f, hh = hw * H / W;
-            _mesh = new Mesh { hideFlags = HideFlags.DontUnloadUnusedAsset };
-            _mesh.SetVertices(new[] { new Vector3(-hw, -hh, 0), new Vector3(hw, -hh, 0), new Vector3(hw, hh, 0), new Vector3(-hw, hh, 0) });
-            _mesh.SetUVs(0, new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
-            _mesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
-            _mesh.RecalculateBounds();
+            float hw = Mathf.Max(0.02f, Config.SmokeTermWidth) * 0.5f;
+            _mesh = PixelCanvas.Quad(hw, hw * H / W);
 
             _go = new GameObject("BA_Terminal");
             _go.transform.SetParent(cam.transform, false);
@@ -361,11 +355,11 @@ namespace BombsAway
         private void Draw(float now, int typed)
         {
             // The window: charcoal glass with a thin rim, the title bar solid hazard yellow.
-            for (int i = 0; i < _px.Length; i++) _px[i] = Back;
-            Outline(0, 0, W, H, Rim);
-            Fill(1, 1, W - 2, 10, Bar);
-            TextAt(Title, 4, 3, Ink);
-            TextAt(Label, W - 4 - Width(Label), 3, Ink);
+            _cv.Clear(Back);
+            _cv.Outline(0, 0, W, H, Rim);
+            _cv.Fill(1, 1, W - 2, 10, Bar);
+            _cv.Text(Title, 4, 3, Ink);
+            _cv.Text(Label, W - 4 - PixelCanvas.Width(Label), 3, Ink);
 
             // The log, scrolled so the newest row is the last: the prompt, the script so far,
             // then the memory dump flickering under it while it runs, or the done line.
@@ -388,7 +382,7 @@ namespace BombsAway
                 rows.Add((Prompt + (cursorOn ? "_" : ""), Amber));
             }
             int first = Mathf.Max(0, rows.Count - Rows);
-            for (int i = first; i < rows.Count; i++) TextAt(rows[i].text, 4, RowY + (i - first) * RowPitch, rows[i].c);
+            for (int i = first; i < rows.Count; i++) _cv.Text(rows[i].text, 4, RowY + (i - first) * RowPitch, rows[i].c);
 
             // The fight in cells.
             if (now >= _runAt)
@@ -399,14 +393,13 @@ namespace BombsAway
                     {
                         byte s = done ? (byte)1 : _cells[r * FieldCols + c];
                         if (s == 1) won++;
-                        Fill(4 + c * (Block + 1), FieldY + r * (Block + 1), Block, Block, s == 0 ? CellOld : s == 1 ? CellNew : CellStatic);
+                        _cv.Fill(4 + c * (Block + 1), FieldY + r * (Block + 1), Block, Block, s == 0 ? CellOld : s == 1 ? CellNew : CellStatic);
                     }
                 string pct = $"{Mathf.RoundToInt(100f * won / _cells.Length)}%";
-                TextAt(pct, W - 4 - Width(pct), FieldY, Amber);
+                _cv.Text(pct, W - 4 - PixelCanvas.Width(pct), FieldY, Amber);
             }
 
-            _tex.SetPixels32(_px);
-            _tex.Apply(false);
+            _cv.Upload(_tex);
         }
 
         /// <summary>A line of memory dump that changes every HexStep, at an address that counts up.</summary>
@@ -424,40 +417,6 @@ namespace BombsAway
             return sb.ToString();
         }
 
-        private static int Width(string s) => string.IsNullOrEmpty(s) ? 0 : s.Length * (PixelFont.GW + 1) - 1;
-
-        /// <summary>x, y from the top-left.</summary>
-        private void Put(int x, int y, Color32 c)
-        {
-            if (x < 0 || y < 0 || x >= W || y >= H) return;
-            _px[(H - 1 - y) * W + x] = c;
-        }
-
-        private void Fill(int x, int y, int w, int h, Color32 c)
-        {
-            for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) Put(x + i, y + j, c);
-        }
-
-        private void Outline(int x, int y, int w, int h, Color32 c)
-        {
-            for (int i = 0; i < w; i++) { Put(x + i, y, c); Put(x + i, y + h - 1, c); }
-            for (int j = 0; j < h; j++) { Put(x, y + j, c); Put(x + w - 1, y + j, c); }
-        }
-
-        private void TextAt(string s, int x, int y, Color32 c)
-        {
-            if (string.IsNullOrEmpty(s)) return;
-            foreach (char raw in s)
-            {
-                if (x > W - 4) return;   // cut at the window's edge
-                var g = PixelFont.Bits(char.ToUpperInvariant(raw));
-                if (g != null)
-                    for (int r = 0; r < PixelFont.GH; r++)
-                        for (int col = 0; col < PixelFont.GW; col++)
-                            if (g[r * PixelFont.GW + col] == '#') Put(x + col, y + r, c);
-                x += PixelFont.GW + 1;
-            }
-        }
     }
 
     /// <summary>

@@ -273,27 +273,7 @@ namespace BombsAway
         /// <summary>A free layer for the spheres; -1 = none (they then stay on the prefab's layer).</summary>
         private static int Layer()
         {
-            if (_layer != -2) return _layer;
-            _layer = -1;
-            try
-            {
-                int l = FreeLayers.Take("Shockwave");
-                if (l < 0) { MelonLogger.Warning("[Shockwave] no free layer: every camera draws the fronts."); return -1; }
-                var asset = UniversalRenderPipeline.asset;
-                var list = asset != null ? asset.m_RendererDataList : null;
-                if (list != null)
-                    foreach (var d in list)
-                    {
-                        var u = d != null ? d.TryCast<UniversalRendererData>() : null;
-                        if (u != null && (u.transparentLayerMask.value & (1 << l)) == 0)
-                        {
-                            MelonLogger.Warning($"[Shockwave] the renderer doesn't draw transparent layer {l}: the fronts stay on the default layer.");
-                            return -1;
-                        }
-                    }
-                _layer = l;
-            }
-            catch (Exception e) { MelonLogger.Warning($"[Shockwave] picking a layer failed ({e.Message})."); }
+            if (_layer == -2) _layer = FreeLayers.TakeTransparent("Shockwave", "the fronts stay on the default layer, so every camera draws them");
             return _layer;
         }
 

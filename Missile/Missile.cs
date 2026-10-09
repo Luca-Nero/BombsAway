@@ -49,9 +49,8 @@ namespace BombsAway
             if (rocket)   // armed a few metres out, as it leaves at full speed
                 ep.ArmDelay = Config.RocketArmDistance / Mathf.Max(1f, Config.RocketSpeed);
 
-            // Out of the held launcher's tube if there is one, else ahead of the camera.
-            bool fromTube = HeldTube(kind, out Vector3 spawnAt, out Vector3 tubeDir);
-            if (!fromTube) spawnAt = cam.transform.position + cam.transform.forward * 1.5f;
+            // Out of the held launcher's tube.
+            if (!HeldTube(kind, out Vector3 spawnAt, out Vector3 tubeDir)) return null;
             HeldFired(rocket);
 
             var owned = new System.Collections.Generic.List<Material>();
@@ -104,26 +103,14 @@ namespace BombsAway
                 beam = Config.RocketConvergence > 0f;
                 Vector3 dir = beam
                     ? (cam.transform.position + cam.transform.forward * Config.RocketConvergence - spawnAt).normalized
-                    : fromTube ? tubeDir : cam.transform.forward;
+                    : tubeDir;
                 initVelocity = dir * Config.RocketSpeed;
                 initPhase = 1;
             }
             else
             {
-                // Out of a held launcher: along its tube, which points up from the sight line.
-                // Otherwise the old way: level with the view, MissileLaunchAngle up.
-                Vector3 launchDir;
-                if (fromTube) launchDir = tubeDir;
-                else
-                {
-                    float launchRad = Config.MissileLaunchAngle * Mathf.Deg2Rad;
-                    Vector3 flatFwd = cam.transform.forward;
-                    flatFwd.y = 0f;
-                    if (flatFwd.sqrMagnitude < 0.001f) flatFwd = Vector3.forward;
-                    flatFwd.Normalize();
-                    launchDir = (flatFwd * Mathf.Cos(launchRad) + Vector3.up * Mathf.Sin(launchRad)).normalized;
-                }
-                initVelocity = launchDir * Config.MissileSoftLaunchSpeed;
+                // Along the launcher's tube, which points up from the sight line.
+                initVelocity = tubeDir * Config.MissileSoftLaunchSpeed;
                 initPhase = 0;
             }
 

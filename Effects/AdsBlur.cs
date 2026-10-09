@@ -79,11 +79,8 @@ namespace BombsAway
             _dof = null;
             try
             {
-                Volume global = null;
-                foreach (var v in Resources.FindObjectsOfTypeAll<Volume>())
-                    if (v != null && v.isGlobal && v.profile != null) global = v;
-                if (global == null) return false;
-                var profile = global.profile;
+                var profile = CameraFX.GlobalProfile();
+                if (profile == null) return false;
                 if (!profile.TryGet(out _dof))
                 {
                     _dof = profile.Add<DepthOfField>(false);

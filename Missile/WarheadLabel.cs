@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using Color = UnityEngine.Color;
 
@@ -16,18 +15,8 @@ namespace BombsAway
     internal sealed class WarheadLabel
     {
         private const int W = 24, H = 7;          // javelin_launcher_build.py LABEL_W / LABEL_H
-        private const int Cell = 4;               // 3 wide glyphs, 1 texel apart
+        private const int Cell = PixelFont.SW + 1;   // PixelFont's small glyphs, 1 texel apart
         private const int Top = H - 2;            // glyph row 0 (its top); the cursor sits on row 0
-
-        private static readonly Dictionary<char, string[]> Font = new Dictionary<char, string[]>
-        {
-            ['H'] = new[] { "101", "101", "111", "101", "101" },
-            ['E'] = new[] { "111", "100", "110", "100", "111" },
-            ['A'] = new[] { "010", "101", "111", "101", "101" },
-            ['T'] = new[] { "111", "010", "010", "010", "010" },
-            ['B'] = new[] { "110", "101", "110", "101", "110" },
-            ['X'] = new[] { "101", "101", "010", "101", "101" },
-        };
 
         // The stencil's hazard yellow (the atlas bytes), the HUD's cyan and the LED red.
         private static readonly Color32 Paint = new Color32(199, 143, 0, 255);
@@ -214,7 +203,7 @@ namespace BombsAway
             Glyphs(text, cells, g, 0, 0, Paint, false);
 
             if (cursor >= 0)
-                for (int x = 0; x < 3; x++) Put(1 + cursor * Cell + x, 0, Paint, false);
+                for (int x = 0; x < PixelFont.SW; x++) Put(1 + cursor * Cell + x, 0, Paint, false);
 
             if (g > 0f)
             {
@@ -240,12 +229,12 @@ namespace BombsAway
         {
             for (int i = 0; i < cells; i++)
             {
-                string[] rows = i < text.Length && Font.TryGetValue(text[i], out var f) ? f : null;
-                bool junk = rows == null || (g > 0f && Random.value < g * 0.55f);
-                for (int r = 0; r < 5; r++)
-                    for (int x = 0; x < 3; x++)
+                string bits = i < text.Length ? PixelFont.SmallBits(text[i]) : null;
+                bool junk = bits == null || (g > 0f && Random.value < g * 0.55f);
+                for (int r = 0; r < PixelFont.SH; r++)
+                    for (int x = 0; x < PixelFont.SW; x++)
                     {
-                        bool lit = junk ? Random.value < 0.45f : rows[r][x] == '1';
+                        bool lit = junk ? Random.value < 0.45f : bits[r * PixelFont.SW + x] == '#';
                         if (!lit || (g > 0f && Random.value < g * 0.2f)) continue;   // dropout
                         Put(1 + i * Cell + x + dx, Top - r + dy, c, glow);
                     }

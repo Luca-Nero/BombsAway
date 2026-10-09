@@ -184,7 +184,6 @@ namespace BombsAway
             _lockedBody = null;
             _lockMissile = null;
             _lockHiddenFor = 0f;
-            HideLockIndicator();
         }
 
         /// <summary>Same target: the same limb, or in whole-body mode any limb of the same ragdoll.</summary>

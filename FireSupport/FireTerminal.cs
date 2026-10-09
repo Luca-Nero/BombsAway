@@ -4,7 +4,6 @@ using UnityEngine;
 using Color = UnityEngine.Color;
 using Object = UnityEngine.Object;
 using Quaternion = UnityEngine.Quaternion;
-using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 
 namespace BombsAway
@@ -77,7 +76,7 @@ namespace BombsAway
         private static Material _mat;
         private static Texture2D _tex;
         private static Mesh _mesh;
-        private static readonly Color32[] _px = new Color32[W * H];
+        private static readonly PixelCanvas _cv = new PixelCanvas(W, H, 4);   // text cut 4 px short of the right edge
         private static long? _drawnKey;
 
         private static readonly Color32 ObsPre  = new Color32(140, 144, 150, 255);
@@ -308,7 +307,7 @@ namespace BombsAway
             if (_go.transform.parent != cam.transform) _go.transform.SetParent(cam.transform, false);
             int layer = ViewmodelCamera.Layer(cam);
             if (layer >= 0) { ViewmodelCamera.Sync(); if (_go.layer != layer) _go.layer = layer; }
-            float fov = layer >= 0 ? BinocularView.RestFov(cam) : cam.fieldOfView;
+            float fov = cam.fieldOfView;
 
             float sw = Screen.width, sh = Screen.height;
             float px = Mathf.Max(1.5f, Mathf.Round(sh / 480f) * Mathf.Clamp(Config.RadioTextSize, 0.4f, 2f));
@@ -367,11 +366,11 @@ namespace BombsAway
 
         private static void Draw(float now)
         {
-            for (int i = 0; i < _px.Length; i++) _px[i] = DosTerminal.Back;
-            Outline(0, 0, W, H, Rim);
-            Fill(1, 1, W - 2, 10, DosTerminal.Bar);
-            TextAt(string.IsNullOrEmpty(_program) ? "FIRE.NET" : "FIRE.NET  " + _program, 4, 3, DosTerminal.Ink);
-            TextAt(_status, W - 4 - Width(_status), 3, DosTerminal.Ink);
+            _cv.Clear(DosTerminal.Back);
+            _cv.Outline(0, 0, W, H, Rim);
+            _cv.Fill(1, 1, W - 2, 10, DosTerminal.Bar);
+            _cv.Text(string.IsNullOrEmpty(_program) ? "FIRE.NET" : "FIRE.NET  " + _program, 4, 3, DosTerminal.Ink);
+            _cv.Text(_status, W - 4 - PixelCanvas.Width(_status), 3, DosTerminal.Ink);
 
             // The lines out so far (they start in order), the last Rows of them.
             int shown = 0;
@@ -383,7 +382,7 @@ namespace BombsAway
                 int y = RowY + (i - first) * RowPitch;
                 Color32 pc = l.K == Kind.Obs ? ObsPre : l.K == Kind.Ai ? DosTerminal.Bar : l.K == Kind.Sys ? DosTerminal.Dim : DosTerminal.Amber;
                 Color32 tc = l.K == Kind.Obs ? ObsText : l.K == Kind.Sys ? DosTerminal.Dim : DosTerminal.Amber;
-                TextAt(l.Pre, 4, y, pc);
+                _cv.Text(l.Pre, 4, y, pc);
                 int tx = 4 + l.Pre.Length * (PixelFont.GW + 1);
                 int typed = Typed(l, now);
                 string text = l.Text.Substring(0, typed);
@@ -394,14 +393,13 @@ namespace BombsAway
                 // Killed mid-word: the rest of the line is noise.
                 if (l.Cut >= 0 && typed >= l.Cut && now >= l.Start + l.Cut / l.Rate)
                     text += new string(Glitch[(int)(l.Start * 97f) % Glitch.Length], 2);
-                TextAt(text, tx, y, tc);
+                _cv.Text(text, tx, y, tc);
                 bool newest = i == shown - 1;
                 if (typing || (newest && (now * 2.5f % 1f) < 0.5f))
-                    TextAt("_", tx + typed * (PixelFont.GW + 1), y, tc);
+                    _cv.Text("_", tx + typed * (PixelFont.GW + 1), y, tc);
             }
 
-            _tex.SetPixels32(_px);
-            _tex.Apply(false);
+            _cv.Upload(_tex);
         }
 
         private static bool Ensure()
@@ -416,23 +414,16 @@ namespace BombsAway
                 return false;
             }
             if (_tex == null)
-                _tex = new Texture2D(W, H, TextureFormat.RGBA32, false)
-                    { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontUnloadUnusedAsset, name = "BA_FireTerminal" };
+            {
+                _tex = PixelCanvas.NewTexture(W, H);
+                _tex.name = "BA_FireTerminal";
+            }
             if (_mat == null)
             {
                 _mat = new Material(src) { hideFlags = HideFlags.DontUnloadUnusedAsset };
-                if (_mat.HasProperty("_BaseMap")) _mat.SetTexture("_BaseMap", _tex);
-                _mat.mainTexture = _tex;
+                PixelCanvas.SetTex(_mat, _tex);
             }
-            if (_mesh == null)
-            {
-                // A unit quad, centred, facing -Z; Place scales it to the window's size.
-                _mesh = new Mesh { hideFlags = HideFlags.DontUnloadUnusedAsset };
-                _mesh.SetVertices(new[] { new Vector3(-0.5f, -0.5f, 0), new Vector3(0.5f, -0.5f, 0), new Vector3(0.5f, 0.5f, 0), new Vector3(-0.5f, 0.5f, 0) });
-                _mesh.SetUVs(0, new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
-                _mesh.SetTriangles(new[] { 0, 2, 1, 0, 3, 2 }, 0);
-                _mesh.RecalculateBounds();
-            }
+            if (_mesh == null) _mesh = PixelCanvas.Quad(0.5f, 0.5f);   // a unit quad; Place scales it to the window's size
             _go = new GameObject("BA_FireTerminal");
             _go.transform.SetParent(cam.transform, false);
             _go.AddComponent<MeshFilter>().sharedMesh = _mesh;
@@ -443,43 +434,6 @@ namespace BombsAway
             _go.SetActive(false);
             _drawnKey = null;
             return true;
-        }
-
-        // ── Pixels ──────────────────────────────────────────────────────────────
-
-        private static int Width(string s) => string.IsNullOrEmpty(s) ? 0 : s.Length * (PixelFont.GW + 1) - 1;
-
-        /// <summary>x, y from the top-left.</summary>
-        private static void Put(int x, int y, Color32 c)
-        {
-            if (x < 0 || y < 0 || x >= W || y >= H) return;
-            _px[(H - 1 - y) * W + x] = c;
-        }
-
-        private static void Fill(int x, int y, int w, int h, Color32 c)
-        {
-            for (int i = 0; i < w; i++) for (int j = 0; j < h; j++) Put(x + i, y + j, c);
-        }
-
-        private static void Outline(int x, int y, int w, int h, Color32 c)
-        {
-            for (int i = 0; i < w; i++) { Put(x + i, y, c); Put(x + i, y + h - 1, c); }
-            for (int j = 0; j < h; j++) { Put(x, y + j, c); Put(x + w - 1, y + j, c); }
-        }
-
-        private static void TextAt(string s, int x, int y, Color32 c)
-        {
-            if (string.IsNullOrEmpty(s)) return;
-            foreach (char raw in s)
-            {
-                if (x > W - 4) return;   // cut at the window's edge
-                var g = PixelFont.Bits(char.ToUpperInvariant(raw));
-                if (g != null)
-                    for (int r = 0; r < PixelFont.GH; r++)
-                        for (int col = 0; col < PixelFont.GW; col++)
-                            if (g[r * PixelFont.GW + col] == '#') Put(x + col, y + r, c);
-                x += PixelFont.GW + 1;
-            }
         }
     }
 }

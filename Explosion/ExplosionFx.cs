@@ -24,7 +24,6 @@ namespace BombsAway
     internal static class ExplosionFx
     {
         private const float GroundReach = 1.5f;
-        private const float SpeedOfSound = 343f;
 
         private const float MaxLife = 40f;
 
@@ -48,8 +47,7 @@ namespace BombsAway
 
             // A MOAB bursts a couple of metres up, and its dust, stem and shock ring are on the ground all the same.
             bool onGround = hasGround && origin.y - ground.point.y <= (kind == "Moab" ? 15f : GroundReach);
-            var cam = Camera.main;
-            float delay = cam != null ? Vector3.Distance(cam.transform.position, origin) / SpeedOfSound : 0f;
+            float delay = Sfx.Delay(origin);
 
             // Of the SoundVariant children one plays, picked at random; other Sound* all play (layers).
             var variants = new List<AudioSource>();

@@ -34,9 +34,6 @@ namespace BombsAway
         private const float ReleaseAfterIn = 4f;   // seconds from IN / CLEARED HOT to the release
         private const float F15Station = 1.38f;    // the F15 model's centreline pylon foot, under its middle (its Station marker)
 
-        /// <summary>Per scene, as the batteries': degrees from +Z, -1 until the first drop picks it.</summary>
-        private static float _bombBearing = -1f;
-
         private enum BombShape { Jdam, Moab, Dispenser }
 
         private sealed class BombKind
@@ -178,9 +175,9 @@ namespace BombsAway
             var k = BombFor(type);
             string grid = FireMission.Grid(mark);
             int count = k.Cluster ? Mathf.Clamp(Config.CbuBomblets, 1, 400) : 1;   // the terminal's {N}: bomblets for a CBU
-            if (!Config.ArtyStacking && Busy)
+            if (!Config.AirStacking && Busy(k.Craft))
             {
-                if (!RefuseOnTerminal(k.Code, grid, k.Callsign, count, k.Name, k.Gbu, CraftName(k.Craft)))
+                if (!RefuseOnTerminal(k.Craft, k.Code, grid, k.Callsign, count, k.Name, k.Gbu))
                 {
                     RadioLog.Observer($"{k.Callsign}, grid {grid}. One {k.Gbu}. Over.");
                     RadioLog.Unit(k.Sign, "Unable, engaged. Out.");
@@ -197,7 +194,7 @@ namespace BombsAway
             float v0 = herc ? Mathf.Clamp(Config.MoabCarrierSpeed, 50f, 160f) : Mathf.Max(80f, Config.JdamSpeed);
             float range = Mathf.Max(300f, herc ? Config.MoabReleaseRange : Config.JdamReleaseRange);
             float alt = Mathf.Max(200f, Config.JdamReleaseAltitude);
-            float v1 = Mathf.Clamp(k.ImpactSpeed, 100f, SpeedOfSound * 0.93f);   // its sound rides it: under the speed of sound
+            float v1 = Mathf.Clamp(k.ImpactSpeed, 100f, Sfx.SpeedOfSound * 0.93f);   // its sound rides it: under the speed of sound
 
             // The approach (AirStrike.Approach.cs): the axis the bomb arrives along and the jet's
             // run-in, entry and egress; the flight is worked out releasing at t = 0, then moved to the clock.
@@ -514,36 +511,6 @@ namespace BombsAway
             DestroyBody(b);
             DropSound(b.Fall);
             if (b.C != null) DropCluster(b.C);
-        }
-
-        // ── The shake, with the blast wave ──────────────────────────────────────
-
-        private sealed class PendingShake { public float At, Reach; public Vector3 Origin; }
-        private static readonly List<PendingShake> _shakes = new List<PendingShake>();
-
-        /// <summary>
-        /// A bomb went off (ExplosionSystem): the camera shakes when its blast wave arrives, late
-        /// by the distance over the speed of sound, out to a reach that grows with the cube root
-        /// of the charge (an HE warhead's 3 kg: 20 m; a Mk 84: about 210 m).
-        /// </summary>
-        public static void Shake(Vector3 origin, string kind)
-        {
-            if (!Config.CamFXEnabled) return;
-            float charge = kind == "Jdam500" ? Config.Jdam500ChargeKgTNT : kind == "Jdam1000" ? Config.Jdam1000ChargeKgTNT
-                         : kind == "Moab" ? Config.MoabChargeKgTNT : Config.Jdam2000ChargeKgTNT;
-            var cam = Camera.main;
-            float delay = cam != null ? Vector3.Distance(cam.transform.position, origin) / SpeedOfSound : 0f;
-            _shakes.Add(new PendingShake { At = Time.time + delay, Origin = origin, Reach = 2f * Mathf.Pow(Mathf.Max(1f, charge) / 3f, 1f / 3f) });
-        }
-
-        private static void TickShakes(float now)
-        {
-            for (int i = _shakes.Count - 1; i >= 0; i--)
-            {
-                if (now < _shakes[i].At) continue;
-                CameraFX.AddTrauma(_shakes[i].Origin, 1.5f, _shakes[i].Reach);
-                _shakes.RemoveAt(i);
-            }
         }
 
         // ── The models ──────────────────────────────────────────────────────────
