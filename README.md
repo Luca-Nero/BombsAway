@@ -4,77 +4,75 @@
 ![Game Version](https://img.shields.io/badge/Game-Release-blue?style=flat-square)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-ff5e5b?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/Luca_Nero)
 
-Fully physics-simulated ordnance for FRUKT, each its own item on the mod's own Bombs Away shelf in the inventory - put them on your toolbar, left click to use. Throw fragmentation grenades, stick C4 to anything and blow it remotely, cover a corridor with a directional Claymore, put a Javelin anti-tank missile through a rooftop, or point an AT-4 and let it fly. Every blast does real ray-traced fragmentation, overpressure wounding, and camera shake - nothing is faked with a damage sphere.
+<p>
+<img src="Icons/Grenade.png" width="64" alt="Grenade">
+<img src="Icons/Smoke.png" width="64" alt="Smoke">
+<img src="Icons/Flash.png" width="64" alt="Flashbang">
+<img src="Icons/C4.png" width="64" alt="C4">
+<img src="Icons/Claymore.png" width="64" alt="Claymore">
+<img src="Icons/Javelin.png" width="64" alt="Javelin">
+<img src="Icons/AT4.png" width="64" alt="AT-4">
+<img src="Icons/Binoculars.png" width="64" alt="Binoculars">
+</p>
+
+Grenades, explosives, rocket launchers and a pair of binoculars that call in artillery and air strikes, all for FRUKT.
+
+Every explosion is simulated. Fragments fly as real projectiles, the pressure wave travels outward and wounds what it reaches, and walls give cover.
 
 ---
 
-## Features
+## What You Get
 
-- **Fragmentation Grenade:** Left click to throw. Fuse-timed, with a ray-traced frag pattern (2000 rays by default) that wounds every limb it actually hits.
-    - **Overpressure:** A separate falloff-driven blast wave wounds bodies inside the overpressure radius, independent of shrapnel.
-- **C4 Charge:** Left click to place - it sticks to walls, crates, and Bobs. Right click to detonate.
-    - **Remote Modes:** Multiple charges fire sequentially (oldest first) by default. Press **F1** (C4 in hand) to switch to simultaneous.
-- **Claymore Mine:** Left click to place. Sticky, but self-triggering - anything entering its directional proximity cone sets it off. Three red sightlines on the face show the cone at a glance.
-    - **Directional Blast:** High-velocity frag (45 m/s) thrown forward through the cone rather than spherically.
-- **Javelin Anti-Tank Missile:** Right click raises the launcher's command launch unit to your eye; hold it on a target to lock, left click to launch. The flight model is built from two aerospace papers on the real FGM-148 - piecewise-linear thrust curve, soft launch at 18° with an ejection impulse, four-phase flight, aerodynamic drag (F = ½ρV²CdA), and Proportional Navigation guidance in the terminal phase.
-    - **Two Attack Modes:** TOP ATTACK climbs to 40 m and dives; DIRECT takes a flatter 15 m approach. Press the Javelin's toolbar key again (or **F2**) to switch.
-    - **Three Warheads (F3):** HEAT is a directional shaped charge with a narrow cone; HE is a full-sphere burst with a much larger radius; TBX is thermobaric - a fuel cloud ignited, all blast and no fragments, with a longer, wider pressure wave that fills rooms and spills round corners.
-    - **Command Launch Unit:** A live sight on the launcher's display with a sim-style HUD. **N** cycles DAY / NIGHT / WHOT / BHOT, the mouse wheel (or middle click) switches the narrow and wide fields of view.
-    - **Lock-On:** Keep a target in the sight for 3 s to lock - the whole body or a single limb (setting). The lock drops when you lower the launcher, and optionally when the target strays from your view. **B** releases it; **F4** keeps it through several shots.
-- **AT-4 Anti-Tank Rocket:** Carried on the shoulder; right click brings the flip-up sights to your eye, left click fires straight where it points - no lock, no guidance, just a tracer and a drop. Every fresh tube comes up in its transport state and is made ready on its own - pin yanked, cocking lever slammed forward, safety flicked off - and its sights spring up the first time you raise it. It fires with a proper backblast out of the rear, then the spent tube gets tossed aside and a fresh one comes up. Shares the Javelin's warheads (F3).
-- **HUD Panel:** Shows only what the item in hand needs - remote mode with C4; attack mode, warhead, sight and lock state with the Javelin; warhead and reload with the AT-4. Debug mode adds live in-flight telemetry (flight phase, motor burn/coast, current speed).
-- **Adaptive Quality:** Ray, wound, and debris counts scale down automatically under frame pressure and recover once the budget frees up, instead of hitching.
-- **QoL Tweaks:** Per-ordnance blast tuning, configurable physics layer masks for blast and world queries, camera shake intensity and VFX intensity sliders, and placement offsets for C4 and Claymore.
+Eight new items on their own **Bombs Away** shelf in the inventory. Put them on your toolbar and left click.
 
-## Requirements & Compatibility
+### Throwables & Charges
+- **Frag Grenade:** Pull, throw, take cover.
+- **Smoke Grenade:** Five colours. The smoke drifts with the wind, rolls around corners, and explosions blow holes through it.
+- **Flashbang:** Blinds and deafens anyone looking at it, or at a wall it lights up. That includes you. Bobs throw their hands over their eyes and ears.
+- **C4:** Sticks to anything, including Bobs. Place as many as you like and set them off from a distance, one by one or all at once.
+- **Claymore:** Set it down and walk away. Anything that crosses its laser tripwires gets the front of it.
 
-- **Prerequisites:** MelonLoader 0.7.2+ Installation. [Check out their Tutorial!](https://melonwiki.xyz/#/)
-- **Prerequisites:** [FruitLib](https://github.com/Luca-Nero/FruitLib) 5.10.0+ in your `Mods/` folder - BombsAway uses it for the config menu, HUD, performance monitor, asset bundle and ballistics.
-- **Compatibility:** No known Incompatabilities.
+### Launchers
+- **Javelin:** Raise the command launch unit, which has working day, night and thermal views, and lock on. The missile climbs high and dives onto the target from above.
+- **AT-4:** Shoulder it, aim down the iron sights, fire. Mind the backblast. The spent tube gets tossed and a fresh one comes up.
+- **Three warheads for both:** HEAT for punching through, HE for a big blast, and thermobaric for clearing rooms.
+
+### Binoculars: Fire Support
+Laze a target and call it in:
+- **Artillery:** 155 mm barrages, 81 mm mortars, smoke screens, illumination flares and precision-guided shells.
+- **Air support:** A-10 and F-22 gun runs, Apache rocket strikes (high explosive or flechette darts), JDAMs, cluster bombs, and the MOAB.
+
+Every aircraft shows up, plans its own approach around cover and flies it. Each crew talks you through the mission on a terminal, and each one has its own personality.
+
+### How It Plays
+- **Cover matters:** Fragments are stopped by walls and hurt the limbs they hit. Explosions don't damage everything inside a sphere.
+- **Sound and shake reach you late:** The blast wave travels at the speed of sound, so the shake and the bang reach you after the flash.
+- **Chain reactions:** Shoot a charge to set it off, a blast can set off the charges near it, and cluster bomb duds stay live.
+
+## Requirements
+
+- [MelonLoader](https://melonwiki.xyz/#/) 0.7.2 or newer
+- [FruitLib](https://github.com/Luca-Nero/FruitLib) 5.10 or newer, in your `Mods/` folder
 
 ## Installation
 
 1. Download the latest release from the [Releases page](../../releases/latest).
 2. Extract the archive.
-3. Drop the contents into your game's `Mods/` directory.
+3. Drop the contents into your game's `Mods/` folder.
+4. In game, open the inventory, find the **Bombs Away** shelf, and drag what you want onto your toolbar.
 
-## Controls (Defaults)
+## Settings
 
-Grenade, C4, Claymore, Javelin and AT-4 are separate items on the inventory's Bombs Away shelf. Put the ones you want on your toolbar, select one, then:
-
-| Input | Action |
-|-----|--------|
-| Left click | Throw grenade, place C4 or Claymore, launch Javelin, fire AT-4 |
-| Right click (C4) | Detonate placed charges |
-| F1 (C4) | Toggle sequential / simultaneous remote mode |
-| Right click hold (Javelin) | Sight through the CLU; holding on a target locks it |
-| Right click hold (AT-4) | Aim through the iron sights |
-| Mouse wheel / middle click (Javelin) | Narrow / wide field of view |
-| N (Javelin) | Cycle DAY / NIGHT / WHOT / BHOT |
-| B (Javelin) | Release lock |
-| Its toolbar key again, or F2 (Javelin) | Toggle TOP ATTACK / DIRECT |
-| F3 (Javelin, AT-4) | Cycle HEAT / HE / TBX warhead |
-| F4 (Javelin) | Toggle persistent / standard lock |
-
-## Configuration
-
-`GrenadeConfig.ini` is created next to the DLL on first launch. It is sectioned and documented - Controls, Grenade, C4, Claymore, Missile, Missile HE, Homing, AT-4, Wounds, Effects, Placement, and Debug. The file is rewritten on load, so new fields appear on update without losing your existing values. Everything is also editable live through FruitLib's in-game menu.
-
-Notable knobs: `FragRayCount` (shrapnel density), `MissileNavGain` (N in the PN guidance law), `MissileAscentHeight` / `MissileDirectAscentHeight` (cruise altitudes), `AdaptiveQuality` and `MinQualityScale` (performance floor), and `FragLayerMask` / `WorldLayerMask` if you need to exclude physics layers.
-
-## Known Issues
-
-- **No audio.** Unity's IL2CPP audio import pipeline is stripped in this build, so there is currently no route to creating AudioClips from scratch. Engine limitation, still under investigation.
-- **Shrapnel can clip through thin geometry.**
+All settings are in the game's pause menu, provided by FruitLib. They're also saved to `UserData/GrenadeConfig.ini`.
 
 ---
 
 ## Support & Feedback
 
-Found a bug or have a suggestion? Feel free to open an issue on the [Issues page](../../issues) or catch me on Discord.
+Found a bug or have an idea? Open an issue on the [Issues page](../../issues) or catch me on Discord.
 
-If you enjoy my work and want to support future updates, feel free to [buy me a coffee on Ko-fi](https://ko-fi.com/Luca_Nero)!
+If you enjoy the mod and want to support future updates, you can [buy me a coffee on Ko-fi](https://ko-fi.com/Luca_Nero)!
 
 ## License
 
-[AGPL-3.0](LICENSE) © Luca Nero / Game Community
+[AGPL-3.0](LICENSE.txt) © Luca Nero / Game Community
