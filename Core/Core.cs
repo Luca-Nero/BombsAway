@@ -87,9 +87,7 @@ namespace BombsAway
         {
             ExplosionDebugDraw.Tick();
             // The test bench's key only answers with DebugHotkeys on.
-            if (Config.DebugHotkeys) 
-                
-                    .Tick(!FruitMenu.IsInputSuppressed);
+            if (Config.DebugHotkeys) TestBench.Tick(!FruitMenu.IsInputSuppressed);
             TickChain();
             TickPlacement();
             TickHeld();
