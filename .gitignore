@@ -18,6 +18,8 @@ mono_crash.*
 
 # Build results
 [Dd]ebug/
+# ...but Debug/ at the root is source (TestBench.cs etc.), not build output
+!/Debug/
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
