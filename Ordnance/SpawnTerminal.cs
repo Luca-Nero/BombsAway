@@ -215,9 +215,8 @@ namespace BombsAway
 
     /// <summary>
     /// A held model fought into (or out of) existence texel by texel (TexelFight's rule). Each
-    /// part on URP Lit gets a copy of its material, alpha-cut (the variant the launchers' stencils
-    /// already bring into the bundle), on a copy of its atlas whose alpha says which texels exist
-    /// right now; static flashes hazard yellow, rows tear. Parts on other shaders (the screens) and
+    /// part on URP Lit gets a copy of its material, alpha-cut, on a copy of its atlas whose alpha
+    /// says which texels exist right now; static flashes hazard yellow, rows tear. Parts on other shaders (the screens) and
     /// on textures made at runtime (the warhead stencil) are hidden meanwhile. Finish puts every
     /// part's own materials back. Each instance keeps its own atlas copies (a model can spawn
     /// while the last one is still going); the atlases are read once (TexelFight.Read), ahead of
@@ -442,6 +441,9 @@ namespace BombsAway
             m.SetTexture("_BaseMap", sheet.Tex);
             m.SetFloat("_AlphaClip", 1f);
             m.SetFloat("_Cutoff", 0.5f);
+            // Needs the part's own keywords + _ALPHATEST_ON as a variant in the bundle, or Unity
+            // falls back to an opaque one silently and the model is just there: _Variants/
+            // BA_AlphaTestVariant.mat carries the plain set, the launchers' labels the _EMISSION one.
             m.EnableKeyword("_ALPHATEST_ON");
             m.renderQueue = 2450;
             return m;
