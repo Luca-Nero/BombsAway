@@ -69,7 +69,7 @@ namespace BombsAway
         public static void Detonate(ExplosionParams p)
         {
             var spec = SpecFor(p);
-            FruitBallistics.SpawnExplosion(spec.Id, p.Origin, p.Forward, p.Axis, 0, ExplosionFeatures.All);
+            FruitBallistics.SpawnExplosion(spec.Id, p.Origin, p.Forward, p.Axis, 0, ExplosionFeatures.All, p.Instigator);
         }
 
         /// <summary>The FruitLib spec for this kind of explosive, brought in line with

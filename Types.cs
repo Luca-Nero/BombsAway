@@ -44,6 +44,7 @@ namespace BombsAway
         public float TripAt = -1f;            // claymore: when a laser was broken (<0 = not tripped)
         public bool RemoteTriggered;
         public Vector3 ThrowDir;
+        public bool Landed;                   // told the world it came to rest (WorldEvents)
 
         // Scripted flight (sticky ordnance): see Ordnance.Flight.cs.
         public bool Ballistic;
@@ -122,6 +123,10 @@ namespace BombsAway
     {
         /// <summary>Which explosive this is. Registered with FruitLib as "BombsAway." + Kind.</summary>
         public string Kind = "Grenade";
+        /// <summary>The tracked body (FruitBody.Id) whose charge this is; 0 = the player. A body that
+        /// pulls a pin, throws, sets off or fires one makes everything it does its own - the
+        /// explosion, the wounds, the near misses - instead of the player's (FruitLib 5.34.0).</summary>
+        public int Instigator;
         public bool Sticky = false;
         public DetonationMode Detonation = DetonationMode.Impact;
         public float FuseTime = 2f;

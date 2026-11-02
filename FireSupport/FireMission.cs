@@ -397,6 +397,7 @@ namespace BombsAway
                 if (!m.Splashed && now >= m.FirstImpact - Config.ArtySplashWarning)
                 {
                     m.Splashed = true;
+                    WorldEvents.Publish("Incoming", "artillery shells are screaming in from the sky", m.Mark, 60f, 0.9f, "artillery");
                     if (m.Term != null) FireTerminal.Play(m.Term, "splash", "kill", "last", "free");   // and the unit is deleted
                     else
                     {

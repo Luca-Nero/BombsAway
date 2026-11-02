@@ -112,7 +112,16 @@ namespace BombsAway
 
             var obj = _bundle.Spawn(PrefabName(o), position, Quaternion.identity);
             if (obj == null) return null;
+            materials = OwnMaterials(obj, out mainRenderer);
+            return obj;
+        }
 
+        /// <summary>
+        /// Gives a copy of a prefab its own copy of each material it uses, so the fuse flash
+        /// tints this charge only, and returns them. <paramref name="mainRenderer"/> is the Body's.
+        /// </summary>
+        internal static Material[] OwnMaterials(GameObject obj, out Renderer mainRenderer)
+        {
             // One copy per distinct material (the C4 has three: atlas, LED, screen).
             var renderers = obj.GetComponentsInChildren<Renderer>();
             var copies = new Dictionary<System.IntPtr, Material>();
@@ -123,12 +132,12 @@ namespace BombsAway
                 if (!copies.TryGetValue(src.Pointer, out var own)) copies[src.Pointer] = own = new Material(src);
                 r.sharedMaterial = own;
             }
-            materials = new Material[copies.Count];
+            var materials = new Material[copies.Count];
             copies.Values.CopyTo(materials, 0);
 
             var body = obj.transform.Find("Body");
             mainRenderer = body != null ? body.GetComponent<Renderer>() : (renderers.Length > 0 ? renderers[0] : null);
-            return obj;
+            return materials;
         }
 
         /// <summary>

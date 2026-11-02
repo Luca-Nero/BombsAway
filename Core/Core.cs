@@ -16,7 +16,7 @@ namespace BombsAway
 {
     public partial class Core : MelonMod
     {
-        public const string Version = "5.29.2";
+        public const string Version = "5.31.2";
 
         private static readonly List<GrenadeState> _grenades = new List<GrenadeState>();
         private static readonly List<HomingMissileState> _missiles = new List<HomingMissileState>();
@@ -32,8 +32,13 @@ namespace BombsAway
         public static bool PersistentLock = false;
 
         // ── FruitLib dependency ──────────────────────────────────────────────
-        // 5.10.0: jets on full-sphere specs and the surface-burst height (the BLU-97 and the MOAB need both).
-        private const int LibMajor = 5, LibMinor = 10, LibPatch = 0;
+        // 5.34.0: an instigator on explosions and rounds (SpawnExplosion's last argument), so what a
+        // body sets off is published in its name, not the player's.
+        // 5.30.0: handling recipes (FruitItemProp.Handling): NPCs pull the pin and throw, aim tubes.
+        // 5.29.0: items put down with the game's spawn-mode key (FruitItemProp.MakeModel) and used
+        // with its interaction key (FruitPropUse). 5.10.0: jets on full-sphere specs and the
+        // surface-burst height (the BLU-97 and the MOAB need both).
+        private const int LibMajor = 5, LibMinor = 34, LibPatch = 0;
         private bool _active;
 
         public override void OnInitializeMelon()

@@ -37,21 +37,37 @@ namespace BombsAway
         /// A Javelin at <paramref name="target"/> (guided, TOP or DIR), or with
         /// <paramref name="rocket"/> an AT-4 rocket: no seeker, no motor after the tube, straight
         /// out where the launcher points and falling from there.
+        /// <paramref name="fromAt"/>/<paramref name="fromDir"/>: out of a launcher put down in the
+        /// world (Placement/Core.SpawnProps.cs) instead of the held one: straight along its tube,
+        /// a Javelin flying DIR at the point 800 m on.
+        /// <paramref name="instigator"/>: the body (FruitBody.Id) that fired it, 0 = the player.
         /// </summary>
-        private static HomingMissileState SpawnMissile(Rigidbody target, TargetBody body = null, bool rocket = false)
+        private static HomingMissileState SpawnMissile(Rigidbody target, TargetBody body = null, bool rocket = false,
+                                                       Vector3? fromAt = null, Vector3? fromDir = null, int instigator = 0)
         {
             var cam = Camera.main;
-            if (cam == null) return null;
+            bool handHeld = !fromAt.HasValue;
+            if (cam == null && handHeld) return null;
             var kind = rocket ? Ordnance.Rocket : Ordnance.Missile;
 
             var ep = ExplosionParams.ForWarhead(MissileWarheadMode);
+            ep.Instigator = instigator;
 
             if (rocket)   // armed a few metres out, as it leaves at full speed
                 ep.ArmDelay = Config.RocketArmDistance / Mathf.Max(1f, Config.RocketSpeed);
 
-            // Out of the held launcher's tube.
-            if (!HeldTube(kind, out Vector3 spawnAt, out Vector3 tubeDir)) return null;
-            HeldFired(rocket);
+            Vector3 spawnAt, tubeDir;
+            if (handHeld)
+            {
+                // Out of the held launcher's tube.
+                if (!HeldTube(kind, out spawnAt, out tubeDir)) return null;
+                HeldFired(rocket);
+            }
+            else
+            {
+                spawnAt = fromAt.Value;
+                tubeDir = (fromDir ?? Vector3.forward).normalized;
+            }
 
             var owned = new System.Collections.Generic.List<Material>();
             // The bundled model: its own material copies, and for the Javelin a rig for fins and nozzle glow.
@@ -89,7 +105,7 @@ namespace BombsAway
             trail.Clear();
 
             bool unguided = rocket;
-            bool topAttack = !rocket && MissileAttackMode == AttackMode.Top;
+            bool topAttack = !rocket && handHeld && MissileAttackMode == AttackMode.Top;
 
             Vector3 initVelocity;
             int initPhase;
@@ -100,7 +116,7 @@ namespace BombsAway
                 // range it heads from the muzzle for the centre line that far out and then rides
                 // that line, so it goes where the crosshair (or the sight) was, whatever the tube's
                 // offset from the eye. Without one it flies along the tube and drops.
-                beam = Config.RocketConvergence > 0f;
+                beam = handHeld && Config.RocketConvergence > 0f;
                 Vector3 dir = beam
                     ? (cam.transform.position + cam.transform.forward * Config.RocketConvergence - spawnAt).normalized
                     : tubeDir;
@@ -137,7 +153,8 @@ namespace BombsAway
             }
             else
             {
-                tgtPos = cam.transform.position + cam.transform.forward * 800f;
+                tgtPos = handHeld ? cam.transform.position + cam.transform.forward * 800f
+                                  : spawnAt + tubeDir * 800f;
             }
 
             float cruiseAlt = topAttack
@@ -149,8 +166,8 @@ namespace BombsAway
             var state = new HomingMissileState
             {
                 Beam = beam,
-                BeamOrigin = cam.transform.position,
-                BeamDir = cam.transform.forward,
+                BeamOrigin = cam != null ? cam.transform.position : spawnAt,
+                BeamDir = cam != null ? cam.transform.forward : tubeDir,
                 Obj = obj,
                 TargetRb = beamRb,
                 TargetRenderer = targetRend,
@@ -172,6 +189,8 @@ namespace BombsAway
                 Thermal = CluThermal,
             };
             _missiles.Add(state);
+            WorldEvents.Publish("Launched", rocket ? "a rocket was fired with a roar" : "a guided missile was launched",
+                                spawnAt, 40f, 0.6f, rocket ? "rocket" : "guided missile", instigator);
 
             if (Config.Dbg1) MelonLogger.Msg(
                 $"[Missile] Launched ({(unguided ? "AT-4" : topAttack ? "TOP" : "DIR")}) " +

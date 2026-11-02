@@ -31,27 +31,23 @@ namespace BombsAway
 
         /// <summary>Body, rigidbody and state for one charge, at rest at <paramref name="position"/>.
         /// Throwing and placing both start here; only what happens next differs.</summary>
-        private static GrenadeState CreateOrdnance(Ordnance o, Vector3 position)
+        /// <summary>A charge's blast, object name and mass: one place for throwing, placing and
+        /// arming a prop (Placement/Core.SpawnProps.cs).</summary>
+        private static ExplosionParams ParamsFor(Ordnance o, out string name, out float mass)
         {
-            ExplosionParams ep; string name; float mass;
             switch (o)
             {
-                case Ordnance.C4:
-                    ep = ExplosionParams.FromC4Config(Vector3.zero);
-                    name = "C4"; mass = 0.75f; break;
-                case Ordnance.Claymore:
-                    ep = ExplosionParams.FromClaymoreConfig(Vector3.zero);
-                    name = "Claymore"; mass = 0.75f; break;
-                case Ordnance.Smoke:
-                    ep = ExplosionParams.FromSmokeConfig(Vector3.zero);
-                    name = "SmokeGrenade"; mass = 0.55f; break;
-                case Ordnance.Flash:
-                    ep = ExplosionParams.FromFlashConfig(Vector3.zero);
-                    name = "Flashbang"; mass = 0.4f; break;
-                default:
-                    ep = ExplosionParams.FromGrenadeConfig(Vector3.zero);
-                    name = "Grenade"; mass = 0.5f; break;
+                case Ordnance.C4:       name = "C4";           mass = 0.75f; return ExplosionParams.FromC4Config(Vector3.zero);
+                case Ordnance.Claymore: name = "Claymore";     mass = 0.75f; return ExplosionParams.FromClaymoreConfig(Vector3.zero);
+                case Ordnance.Smoke:    name = "SmokeGrenade"; mass = 0.55f; return ExplosionParams.FromSmokeConfig(Vector3.zero);
+                case Ordnance.Flash:    name = "Flashbang";    mass = 0.4f;  return ExplosionParams.FromFlashConfig(Vector3.zero);
+                default:                name = "Grenade";      mass = 0.5f;  return ExplosionParams.FromGrenadeConfig(Vector3.zero);
             }
+        }
+
+        private static GrenadeState CreateOrdnance(Ordnance o, Vector3 position)
+        {
+            var ep = ParamsFor(o, out string name, out float mass);
 
             var obj = OrdnanceModels.Spawn(o, position, out Renderer rend, out Material[] mats);
             obj.name = name;
@@ -132,6 +128,7 @@ namespace BombsAway
 
             _grenades.Add(g);
             _lastThrowTime = Time.time;
+            WorldEvents.Publish("Thrown", $"the player threw a {WorldEvents.Label(g)}", g.Obj.transform.position, 12f, 0.35f, WorldEvents.Label(g));
             return g;
         }
     }

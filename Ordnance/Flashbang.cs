@@ -65,8 +65,9 @@ namespace BombsAway
         /// <summary>Bodies held right now (the HUD's debug readout).</summary>
         public static int Count => _stunned.Count;
 
-        public static void Bang(Vector3 origin)
+        public static void Bang(Vector3 origin, int instigator = 0)
         {
+            WorldEvents.Publish("Flashbang", "a flashbang went off: a blinding flash and a deafening bang", origin, 15f, 0.9f, "flashbang", instigator);
             LightSurfaces(origin);
             PlayerEffect(origin);
 

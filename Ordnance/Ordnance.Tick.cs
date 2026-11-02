@@ -21,12 +21,26 @@ namespace BombsAway
             var ep = g.Params;
             g.Timer += dt;
 
+            // A live charge in a body's hand is that body's from then on (handed over, or picked up
+            // again): whatever it goes on to do is blamed on whoever last held it.
+            var heldBy = g.Rb != null ? FruitLib.FruitItems.Of(g.Rb)?.Holder : null;
+            if (heldBy != null) ep.Instigator = heldBy.Id;
+
             // Sticky ordnance flies a scripted arc and sticks on its first contact
             // (Ordnance.Flight.cs); a grenade is left entirely to physics.
             if (g.Ballistic && !g.Stuck)
             {
                 TickScriptedFlight(g, dt);
                 if (g.Dead) return;
+            }
+
+            // A physical charge coming to rest is news to whoever it rests near.
+            if (!g.Landed && !g.Ballistic && !g.Stuck && g.Rb != null && g.Timer > 0.25f
+                && g.Rb.linearVelocity.sqrMagnitude < 2.25f)
+            {
+                g.Landed = true;
+                WorldEvents.Publish("Landed", $"a {WorldEvents.Label(g)} landed", g.Obj.transform.position, 12f,
+                                    g.Obj.name == "Grenade" ? 0.8f : 0.6f, WorldEvents.Label(g), ep.Instigator);
             }
 
             // ── Arming ────────────────────────────────────────────────
@@ -115,6 +129,7 @@ namespace BombsAway
                             if (tripped)
                             {
                                 Sfx.Play("ClayTrip", g.Obj.transform.position);
+                                WorldEvents.Publish("Tripped", "a claymore mine clicked: its laser was broken", g.Obj.transform.position, 8f, 0.7f, "claymore mine", ep.Instigator);
                                 if (Config.MineTripDelay > 0f) g.TripAt = Time.time;
                                 else detonate = true;
                             }
@@ -185,6 +200,8 @@ namespace BombsAway
                 var ownCollider = g.Obj.GetComponent<Collider>();
                 if (ownCollider != null) ownCollider.enabled = false;
             }
+
+            WorldEvents.Stuck(g, pos, host);
         }
 
         /// <summary>The body a stuck charge rode on was destroyed: undo StickAt and let it drop.
@@ -251,7 +268,7 @@ namespace BombsAway
             g.Dead = true;
             g.Params.Origin = origin;
             ExplosionSystem.Detonate(g.Params);
-            if (g.Params.Kind == "Flash") Flashbang.Bang(origin);
+            if (g.Params.Kind == "Flash") Flashbang.Bang(origin, g.Params.Instigator);
         }
 
         /// <summary>

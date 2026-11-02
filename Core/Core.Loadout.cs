@@ -76,7 +76,7 @@ namespace BombsAway
 
         /// <summary>This item is in hand and gameplay input is live.</summary>
         private static bool Holding(Ordnance o) =>
-            Equipped && Selected == o && !FruitMenu.BlocksGameplayInput;
+            Equipped && Selected == o && !FruitMenu.BlocksGameplayInput && !SpawnModeOn;
 
         /// <summary>RMB held with the missile out (and all there): scanning for a lock.</summary>
         private static bool SlotScanning => Holding(Ordnance.Missile) && Input.GetMouseButton(1) && HeldReady(Ordnance.Missile);
@@ -93,7 +93,7 @@ namespace BombsAway
             for (int i = 0; i < OrdnanceLabels.Length; i++)
             {
                 var o = (Ordnance)i;   // one per closure
-                FruitInventory.AddItem(new FruitItem
+                var item = new FruitItem
                 {
                     Id           = "BombsAway:" + o,
                     Name         = OrdnanceLabels[i],
@@ -105,8 +105,20 @@ namespace BombsAway
                     OnMiddle     = item => OnOrdnanceMiddle(o),
                     OnDeselected = item => OnOrdnanceDeselected(o, item.Slot),
                 }
-                .AddStat("use", OrdnanceUse[i]));
+                .AddStat("use", OrdnanceUse[i]);
+                MarkDangerous(item, o != Ordnance.Binoculars && o != Ordnance.Smoke);
+                MakePlaceable(item, o);
+                FruitInventory.AddItem(item);
             }
+        }
+
+        /// <summary>FruitItem.Dangerous (FruitLib 5.17.0) tells NPC mods such as NeuroFrukt that
+        /// the player holding this is a threat. Set by name, so the mod still runs on an older
+        /// FruitLib without the field.</summary>
+        private static void MarkDangerous(FruitItem item, bool dangerous)
+        {
+            var f = typeof(FruitItem).GetField("Dangerous");
+            if (f != null) f.SetValue(item, (bool?)dangerous);
         }
 
         private static int _selectedSlot = -1;
@@ -261,7 +273,7 @@ namespace BombsAway
         /// <summary>LMB for the equipped ordnance.</summary>
         private static void TickLoadout()
         {
-            if (!Equipped || FruitMenu.BlocksGameplayInput) return;
+            if (!Equipped || FruitMenu.BlocksGameplayInput || SpawnModeOn) return;
 
             if (!Input.GetMouseButtonDown(0)) return;
             switch (Selected)

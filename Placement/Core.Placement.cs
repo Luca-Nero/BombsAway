@@ -71,7 +71,8 @@ namespace BombsAway
         {
             _placeValid = false;
 
-            bool want = Config.PlacementEnabled && Equipped && Placeable(Selected)
+            // The game's own spawn mode (the G key, Core.SpawnProps.cs) shares the hologram service.
+            bool want = Config.PlacementEnabled && Equipped && Placeable(Selected) && !SpawnModeOn
                      && !FruitMenu.BlocksGameplayInput && !FruitMenu.IsInputSuppressed;
             if (!want) { StopHologram(); return; }
 

@@ -508,8 +508,10 @@ namespace BombsAway
             }
         }
 
-        /// <summary>Lets a part go: it keeps its world pose and falls as a small physics body.</summary>
-        private static void ReleasePart(Transform part, float mass, Vector3 velocity, Vector3 angularVelocity)
+        /// <summary>Lets a part go: it keeps its world pose and falls as a small physics body.
+        /// <paramref name="ofThrow"/>: it left the hand with this throw, so the charge thrown next
+        /// does not knock it about.</summary>
+        private static BoxCollider ReleasePart(Transform part, float mass, Vector3 velocity, Vector3 angularVelocity, bool ofThrow = true)
         {
             part.SetParent(null, true);
             var go = part.gameObject;
@@ -529,8 +531,9 @@ namespace BombsAway
             rb.linearVelocity = velocity;
             rb.angularVelocity = angularVelocity;
 
-            _looseThisThrow.Add(box);
+            if (ofThrow) _looseThisThrow.Add(box);
             AddLoosePart(go, null);
+            return box;
         }
 
         private static void AddLoosePart(GameObject go, Object[] owned)

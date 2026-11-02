@@ -96,6 +96,7 @@ namespace BombsAway
             if (g.Obj == null || g.SmokeUntil >= 0f) return;
             g.SmokeUntil = Time.time + Config.SmokeDuration;
             var can = g.Obj.transform;
+            WorldEvents.Publish("SmokeLit", "a smoke grenade started pouring out thick smoke", can.position, 15f, 0.4f, "smoke grenade", g.Params.Instigator);
 
             var prefab = OrdnanceModels.Asset("FX_SmokeGrenade");
             if (prefab != null)
